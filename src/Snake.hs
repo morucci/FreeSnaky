@@ -12,16 +12,15 @@ import Relude
 
 data Coord = Coord {x :: Int, y :: Int} deriving (Show, Eq)
 
-data Atom = SnakeBody Coord | Block Coord deriving (Show)
+newtype SnakeBody = SnakeBody Coord deriving (Show)
 
-type Snaky = [Atom]
+newtype Block = Block Coord deriving (Show)
+
+type Snaky = [SnakeBody]
 
 data Direction = UP | DOWN | RIGHT | LEFT deriving (Show, Eq)
 
 data MovingSnaky = MovingSnaky {direction :: Direction, snake :: Snaky} deriving (Show)
-
-ua :: Text
-ua = "Unexpected Atom"
 
 -- >>> mkSnake $ Coord 5 5
 -- MovingSnaky {direction = UP, snake = [SnakeBody (Coord {x = 5, y = 5}),SnakeBody (Coord {x = 5, y = 4})]}
@@ -42,24 +41,20 @@ moveSnake ms@MovingSnaky {..} =
     RIGHT -> move snake shiftR
     LEFT -> move snake shiftL
   where
-    move :: Snaky -> (Atom -> Atom) -> Snaky
+    move :: Snaky -> (SnakeBody -> SnakeBody) -> Snaky
     move s sfunc = case s of
       [] -> error "Invalid Snaky"
       co : cos -> let head = sfunc co in [head] <> shiftBody co cos
 
-    shiftBody :: Atom -> Snaky -> Snaky
+    shiftBody :: SnakeBody -> Snaky -> Snaky
     shiftBody c s = case s of
       [] -> s
       co : cos -> [c] <> shiftBody co cos
 
     shiftU (SnakeBody (Coord x y)) = SnakeBody $ Coord x (y + 1)
-    shiftU _ = error ua
     shiftD (SnakeBody (Coord x y)) = SnakeBody $ Coord x (y - 1)
-    shiftD _ = error ua
     shiftR (SnakeBody (Coord x y)) = SnakeBody $ Coord (x + 1) y
-    shiftR _ = error ua
     shiftL (SnakeBody (Coord x y)) = SnakeBody $ Coord (x - 1) y
-    shiftL _ = error ua
 
 -- >>> moveAndIncreaseSnake . mkSnake $ Coord 5 5
 -- MovingSnaky {direction = UP, snake = [SnakeBody (Coord {x = 5, y = 6}),SnakeBody (Coord {x = 5, y = 5}),SnakeBody (Coord {x = 5, y = 4})]}
@@ -88,7 +83,6 @@ getSnakeCoord :: MovingSnaky -> Coord
 getSnakeCoord (MovingSnaky _ s) = case s of
   SnakeBody co : _ -> co
   [] -> error "Invalid Snaky"
-  _ -> error ua
 
 -- >>> getSnakeLength . mkSnake $ Coord 5 5
 -- 2
@@ -98,6 +92,6 @@ getSnakeLength (MovingSnaky _ s) = length s
 data Map = Map
   { mSnake :: MovingSnaky,
     mSize :: (Coord, Coord),
-    mBlocks :: [Atom]
+    mBlocks :: [Block]
   }
   deriving (Show)
