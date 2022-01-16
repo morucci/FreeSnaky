@@ -24,8 +24,11 @@ common common-options
 library
     import:           common-options
     exposed-modules:  Snake
-    build-depends:    base ^>=4.14.3.0
+                    , Tui
+    build-depends:    base   ^>=4.14.3.0
                     , relude ^>=1.0.0.1
+                    , brick  ^>=0.64
+                    , vty    ^>=5.33
     hs-source-dirs:   src
 
 executable FreeSnaky

@@ -1,10 +1,11 @@
 module Snake
-  ( mkSnake,
-    moveSnake,
+  ( moveSnake,
     moveAndIncreaseSnake,
     setSnakeDirection,
     getSnakeCoord,
     getSnakeLength,
+    mkMap,
+    WMap,
   )
 where
 
@@ -89,9 +90,12 @@ getSnakeCoord (MovingSnaky _ s) = case s of
 getSnakeLength :: MovingSnaky -> Int
 getSnakeLength (MovingSnaky _ s) = length s
 
-data Map = Map
+data WMap = WMap
   { mSnake :: MovingSnaky,
     mSize :: (Coord, Coord),
     mBlocks :: [Block]
   }
   deriving (Show)
+
+mkMap :: WMap
+mkMap = WMap (mkSnake $ Coord 25 25) (Coord 0 0, Coord 100 100) []
