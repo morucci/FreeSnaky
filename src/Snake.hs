@@ -5,7 +5,11 @@ module Snake
     getSnakeCoord,
     getSnakeLength,
     mkMap,
-    WMap,
+    WMap (mHeight, mWidth),
+    queryMap,
+    SnakeBody (SnakeBody),
+    Item (SB, BL),
+    Coord (Coord),
   )
 where
 
@@ -16,6 +20,8 @@ data Coord = Coord {x :: Int, y :: Int} deriving (Show, Eq)
 newtype SnakeBody = SnakeBody Coord deriving (Show)
 
 newtype Block = Block Coord deriving (Show)
+
+data Item = SB SnakeBody | BL Block deriving (Show)
 
 type Snaky = [SnakeBody]
 
@@ -92,10 +98,23 @@ getSnakeLength (MovingSnaky _ s) = length s
 
 data WMap = WMap
   { mSnake :: MovingSnaky,
-    mSize :: (Coord, Coord),
+    mHeight :: Int,
+    mWidth :: Int,
     mBlocks :: [Block]
   }
   deriving (Show)
 
+flattenMap :: WMap -> [[Maybe Item]]
+flattenMap wm = [y | y <- replicate 10 [x | x <- replicate 10 Nothing]]
+
+queryMap :: WMap -> Coord -> Maybe Item
+queryMap wm coord = isSnakeBody <|> isBlock
+  where
+    isSnakeBody =
+      case filter (\(SnakeBody c) -> c == coord) $ snake $ mSnake wm of
+        [] -> Nothing
+        x : xs -> Just $ SB x
+    isBlock = Nothing
+
 mkMap :: WMap
-mkMap = WMap (mkSnake $ Coord 25 25) (Coord 0 0, Coord 100 100) []
+mkMap = WMap (mkSnake $ Coord 5 5) 25 50 []
