@@ -12,8 +12,8 @@ import Snake
     Item (SB),
     SnakeBody (SnakeBody),
     WMap (mHeight, mWidth),
+    getMap,
     mkMap,
-    queryMap,
   )
 
 data Tick = Tick
@@ -25,13 +25,17 @@ newtype AppState = AppState {sMap :: WMap}
 drawUI :: AppState -> [Widget Name]
 drawUI s = [withBorderStyle BS.unicodeBold $ B.borderWithLabel (str "Free Snaky") $ vBox rows]
   where
-    rows = [hBox $ cellsInRow r | r <- [height -1, height -2 .. 0]]
+    rows = [hBox $ cellsInRow r | r <- [0 .. height -1]]
     cellsInRow y = [drawCoord (x, y) | x <- [0 .. width -1]]
-    drawCoord (x, y) = case queryMap (sMap s) (Coord x y) of
-      Just (SB _) -> str "o"
-      _ -> str " "
+    drawCoord (x, y) = case m !!? x of
+      Just r -> case r !!? y of
+        Just (Just (SB _)) -> str "o"
+        Just _ -> str " "
+        Nothing -> str " Out of bounds"
+      Nothing -> error "Out of bounds"
     height = mHeight $ sMap s
     width = mWidth $ sMap s
+    m = getMap (sMap s)
 
 handleEvent :: AppState -> BrickEvent Name Tick -> EventM Name (Next AppState)
 handleEvent s (VtyEvent (V.EvKey V.KEsc [])) = halt s

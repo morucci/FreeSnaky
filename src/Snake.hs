@@ -6,7 +6,7 @@ module Snake
     getSnakeLength,
     mkMap,
     WMap (mHeight, mWidth),
-    queryMap,
+    getMap,
     SnakeBody (SnakeBody),
     Item (SB, BL),
     Coord (Coord),
@@ -32,7 +32,7 @@ data MovingSnaky = MovingSnaky {direction :: Direction, snake :: Snaky} deriving
 -- >>> mkSnake $ Coord 5 5
 -- MovingSnaky {direction = UP, snake = [SnakeBody (Coord {x = 5, y = 5}),SnakeBody (Coord {x = 5, y = 4})]}
 mkSnake :: Coord -> MovingSnaky
-mkSnake (Coord ix iy) = MovingSnaky UP $ foldr func [] $ mkSnake 2
+mkSnake (Coord ix iy) = MovingSnaky UP $ foldr func [] $ mkSnake 3
   where
     func :: Coord -> Snaky -> Snaky
     func (Coord _ _) acc = acc <> [SnakeBody $ Coord ix (iy - length acc)]
@@ -98,23 +98,26 @@ getSnakeLength (MovingSnaky _ s) = length s
 
 data WMap = WMap
   { mSnake :: MovingSnaky,
-    mHeight :: Int,
     mWidth :: Int,
+    mHeight :: Int,
     mBlocks :: [Block]
   }
   deriving (Show)
 
-flattenMap :: WMap -> [[Maybe Item]]
-flattenMap wm = [y | y <- replicate 10 [x | x <- replicate 10 Nothing]]
-
-queryMap :: WMap -> Coord -> Maybe Item
-queryMap wm coord = isSnakeBody <|> isBlock
+getMap :: WMap -> [[Maybe Item]]
+getMap wm = reverse $ foldr buildRow [] [0 .. mWidth wm - 1]
   where
-    isSnakeBody =
-      case filter (\(SnakeBody c) -> c == coord) $ snake $ mSnake wm of
-        [] -> Nothing
-        x : xs -> Just $ SB x
-    isBlock = Nothing
+    buildRow x acc = acc <> [foldr (buildCol x) [] [0 .. mHeight wm - 1]]
+    buildCol :: Int -> Int -> [Maybe Item] -> [Maybe Item]
+    buildCol x y acc' = acc' <> [getItem wm (Coord x y)]
+    getItem :: WMap -> Coord -> Maybe Item
+    getItem wm coord = isSnakeBody <|> isBlock
+      where
+        isSnakeBody =
+          case filter (\(SnakeBody c) -> c == coord) $ snake $ mSnake wm of
+            [] -> Nothing
+            x : xs -> Just $ SB x
+        isBlock = Nothing
 
 mkMap :: WMap
-mkMap = WMap (mkSnake $ Coord 5 5) 25 50 []
+mkMap = WMap (mkSnake $ Coord 25 12) 50 25 []
