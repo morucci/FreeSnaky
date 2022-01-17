@@ -9,11 +9,14 @@ import qualified Graphics.Vty as V
 import Relude
 import Snake
   ( Coord (Coord),
+    Direction (DOWN, LEFT, RIGHT, UP),
     Item (SB),
     SnakeBody (SnakeBody),
-    WMap (mHeight, mWidth),
+    WMap (mHeight, mSnake, mWidth),
     getMap,
     mkMap,
+    moveSnake,
+    setSnakeDirection,
   )
 
 data Tick = Tick
@@ -39,7 +42,23 @@ drawUI s = [withBorderStyle BS.unicodeBold $ B.borderWithLabel (str "Free Snaky"
 
 handleEvent :: AppState -> BrickEvent Name Tick -> EventM Name (Next AppState)
 handleEvent s (VtyEvent (V.EvKey V.KEsc [])) = halt s
+handleEvent s (AppEvent Tick) = do
+  let smap = sMap s
+      newSnake = moveSnake $ mSnake smap
+      newState = smap {mSnake = newSnake}
+  continue s {sMap = newState}
+handleEvent s (VtyEvent (V.EvKey V.KRight [])) = handleDirEvent s RIGHT
+handleEvent s (VtyEvent (V.EvKey V.KLeft [])) = handleDirEvent s LEFT
+handleEvent s (VtyEvent (V.EvKey V.KUp [])) = handleDirEvent s UP
+handleEvent s (VtyEvent (V.EvKey V.KDown [])) = handleDirEvent s DOWN
 handleEvent s _ = continue s
+
+handleDirEvent :: AppState -> Snake.Direction -> EventM Name (Next AppState)
+handleDirEvent s dir = do
+  let smap = sMap s
+      newSnake = moveSnake $ setSnakeDirection dir $ mSnake smap
+      newState = smap {mSnake = newSnake}
+  continue s {sMap = newState}
 
 theMap :: AttrMap
 theMap = attrMap V.defAttr []
@@ -62,5 +81,5 @@ main = do
   initialVty <- buildVty
   void . forkIO . forever $ do
     writeBChan chan Tick
-    threadDelay 100000
+    threadDelay 1000000
   void $ customMain initialVty buildVty (Just chan) app initialState

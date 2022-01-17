@@ -5,11 +5,12 @@ module Snake
     getSnakeCoord,
     getSnakeLength,
     mkMap,
-    WMap (mHeight, mWidth),
+    WMap (mHeight, mWidth, mSnake),
     getMap,
     SnakeBody (SnakeBody),
     Item (SB, BL),
     Coord (Coord),
+    Direction (RIGHT, LEFT, UP, DOWN),
   )
 where
 
