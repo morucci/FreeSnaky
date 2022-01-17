@@ -10,7 +10,7 @@ import Relude
 import Snake
   ( Coord (Coord),
     Direction (DOWN, LEFT, RIGHT, UP),
-    Item (SB),
+    Item (BL, SB),
     SnakeBody (SnakeBody),
     WMap (mHeight, mSnake, mWidth),
     getMap,
@@ -34,6 +34,7 @@ drawUI s = [withBorderStyle BS.unicodeBold $ B.borderWithLabel (str "Free Snaky"
     drawCoord (x, y) = case m !!? x of
       Just r -> case r !!? y of
         Just (Just (SB _)) -> str "o"
+        Just (Just (BL _)) -> str "#"
         Just _ -> str " "
         Nothing -> str " Out of bounds"
       Nothing -> error "Out of bounds"

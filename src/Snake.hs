@@ -118,11 +118,23 @@ getMap wm = reverse $ foldr buildRow [] [0 .. mWidth wm - 1]
         isSnakeBody =
           case filter (\(SnakeBody c) -> c == coord) $ snake $ mSnake wm of
             [] -> Nothing
-            x : xs -> Just $ SB x
-        isBlock = Nothing
+            x : _ -> Just $ SB x
+        isBlock =
+          case filter (\(Block c) -> c == coord) $ mBlocks wm of
+            [] -> Nothing
+            x : _ -> Just $ BL x
 
 mkMap :: WMap
-mkMap = WMap (mkSnake $ Coord 25 12) 50 25 []
+mkMap = WMap (mkSnake $ Coord 25 12) width height mkBounds
+  where
+    mkBounds :: [Block]
+    mkBounds =
+      [Block $ Coord 0 y | y <- [0 .. height]]
+        <> [Block $ Coord (width -1) y | y <- [0 .. height]]
+        <> [Block $ Coord x 0 | x <- [0 .. width]]
+        <> [Block $ Coord x (height -1) | x <- [0 .. width]]
+    width = 50
+    height = 25
 
 runStep :: WMap -> WMap
 runStep m = m {mSnake = moveSnake $ mSnake m}
