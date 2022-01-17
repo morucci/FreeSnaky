@@ -16,6 +16,7 @@ import Snake
     getMap,
     mkMap,
     moveSnake,
+    runStep,
     setSnakeDirection,
   )
 
@@ -42,11 +43,7 @@ drawUI s = [withBorderStyle BS.unicodeBold $ B.borderWithLabel (str "Free Snaky"
 
 handleEvent :: AppState -> BrickEvent Name Tick -> EventM Name (Next AppState)
 handleEvent s (VtyEvent (V.EvKey V.KEsc [])) = halt s
-handleEvent s (AppEvent Tick) = do
-  let smap = sMap s
-      newSnake = moveSnake $ mSnake smap
-      newState = smap {mSnake = newSnake}
-  continue s {sMap = newState}
+handleEvent s (AppEvent Tick) = continue . AppState . runStep $ sMap s
 handleEvent s (VtyEvent (V.EvKey V.KRight [])) = handleDirEvent s RIGHT
 handleEvent s (VtyEvent (V.EvKey V.KLeft [])) = handleDirEvent s LEFT
 handleEvent s (VtyEvent (V.EvKey V.KUp [])) = handleDirEvent s UP
@@ -56,7 +53,7 @@ handleEvent s _ = continue s
 handleDirEvent :: AppState -> Snake.Direction -> EventM Name (Next AppState)
 handleDirEvent s dir = do
   let smap = sMap s
-      newSnake = moveSnake $ setSnakeDirection dir $ mSnake smap
+      newSnake = setSnakeDirection dir $ mSnake smap
       newState = smap {mSnake = newSnake}
   continue s {sMap = newState}
 
@@ -81,5 +78,5 @@ main = do
   initialVty <- buildVty
   void . forkIO . forever $ do
     writeBChan chan Tick
-    threadDelay 1000000
+    threadDelay 500000
   void $ customMain initialVty buildVty (Just chan) app initialState

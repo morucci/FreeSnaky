@@ -5,6 +5,7 @@ module Snake
     getSnakeCoord,
     getSnakeLength,
     mkMap,
+    runStep,
     WMap (mHeight, mWidth, mSnake),
     getMap,
     SnakeBody (SnakeBody),
@@ -122,3 +123,6 @@ getMap wm = reverse $ foldr buildRow [] [0 .. mWidth wm - 1]
 
 mkMap :: WMap
 mkMap = WMap (mkSnake $ Coord 25 12) 50 25 []
+
+runStep :: WMap -> WMap
+runStep m = m {mSnake = moveSnake $ mSnake m}
