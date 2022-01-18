@@ -12,8 +12,9 @@ import Snake
     Direction (DOWN, LEFT, RIGHT, UP),
     Item (BL, SB),
     SnakeBody (SnakeBody),
-    WMap (mHeight, mSnake, mWidth),
-    getMap,
+    WState (mHeight, mSnake, mWidth),
+    World (wFlattenedMap),
+    getWorld,
     mkMap,
     moveSnake,
     runStep,
@@ -24,7 +25,7 @@ data Tick = Tick
 
 data Name = MainView deriving (Eq, Ord, Show)
 
-newtype AppState = AppState {sMap :: WMap}
+newtype AppState = AppState {appWState :: WState}
 
 drawUI :: AppState -> [Widget Name]
 drawUI s = [withBorderStyle BS.unicodeBold $ B.borderWithLabel (str "Free Snaky") $ vBox rows]
@@ -38,13 +39,13 @@ drawUI s = [withBorderStyle BS.unicodeBold $ B.borderWithLabel (str "Free Snaky"
         Just _ -> str " "
         Nothing -> str " Out of bounds"
       Nothing -> error "Out of bounds"
-    height = mHeight $ sMap s
-    width = mWidth $ sMap s
-    m = getMap (sMap s)
+    height = mHeight $ appWState s
+    width = mWidth $ appWState s
+    m = wFlattenedMap $ getWorld (appWState s)
 
 handleEvent :: AppState -> BrickEvent Name Tick -> EventM Name (Next AppState)
 handleEvent s (VtyEvent (V.EvKey V.KEsc [])) = halt s
-handleEvent s (AppEvent Tick) = continue . AppState . runStep $ sMap s
+handleEvent s (AppEvent Tick) = continue . AppState . runStep $ appWState s
 handleEvent s (VtyEvent (V.EvKey V.KRight [])) = handleDirEvent s RIGHT
 handleEvent s (VtyEvent (V.EvKey V.KLeft [])) = handleDirEvent s LEFT
 handleEvent s (VtyEvent (V.EvKey V.KUp [])) = handleDirEvent s UP
@@ -53,10 +54,10 @@ handleEvent s _ = continue s
 
 handleDirEvent :: AppState -> Snake.Direction -> EventM Name (Next AppState)
 handleDirEvent s dir = do
-  let smap = sMap s
+  let smap = appWState s
       newSnake = setSnakeDirection dir $ mSnake smap
       newState = smap {mSnake = newSnake}
-  continue s {sMap = newState}
+  continue s {appWState = newState}
 
 theMap :: AttrMap
 theMap = attrMap V.defAttr []
