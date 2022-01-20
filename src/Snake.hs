@@ -1,22 +1,17 @@
 module Snake
-  ( moveSnake,
-    moveAndIncreaseSnake,
-    setSnakeDirection,
-    getSnakeCoord,
-    getSnakeLength,
-    mkMap,
-    runStep,
-    WState (mHeight, mWidth, mSnake),
+  ( runStep,
     getWorld,
-    World (wStatus, wFlattenedMap),
-    SnakeBody (SnakeBody),
+    initAppMem,
+    World (wStatus, wFlattenedMap, wHeight, wWidth),
     Item (SB, BL),
-    Coord (Coord),
     Direction (RIGHT, LEFT, UP, DOWN),
+    setDirection,
+    AppMem,
   )
 where
 
-import Relude
+import Control.Concurrent.MVar
+import Relude hiding (newEmptyMVar, newMVar, putMVar, readMVar)
 
 data Coord = Coord {x :: Int, y :: Int} deriving (Show, Eq)
 
@@ -34,6 +29,8 @@ data MovingSnaky = MovingSnaky {direction :: Direction, snake :: Snaky} deriving
 
 data WStatus = GAMEOVER | RUNNING deriving (Show)
 
+newtype AppMem = AppMem (MVar WState)
+
 data WState = WState
   { mSnake :: MovingSnaky,
     mWidth :: Int,
@@ -42,7 +39,14 @@ data WState = WState
   }
   deriving (Show)
 
-data World = World {wStatus :: WStatus, wFlattenedMap :: [[Maybe Item]]}
+-- World should be the only data passed to the client
+data World = World
+  { wHeight :: Int,
+    wWidth :: Int,
+    wStatus :: WStatus,
+    wFlattenedMap :: [[Maybe Item]]
+  }
+  deriving (Show)
 
 -- >>> mkSnake $ Coord 5 5
 -- MovingSnaky {direction = UP, snake = [SnakeBody (Coord {x = 5, y = 5}),SnakeBody (Coord {x = 5, y = 4})]}
@@ -111,10 +115,12 @@ getSnakeCoord (MovingSnaky _ s) = case s of
 getSnakeLength :: MovingSnaky -> Int
 getSnakeLength (MovingSnaky _ s) = length s
 
-getWorld :: WState -> World
-getWorld wm =
+stateToWorld :: WState -> World
+stateToWorld wm =
   let wStatus = RUNNING
       wFlattenedMap = reverse $ foldr buildRow [] [0 .. mWidth wm - 1]
+      wHeight = mHeight wm
+      wWidth = mWidth wm
    in World {..}
   where
     buildRow x acc = acc <> [foldr (buildCol x) [] [0 .. mHeight wm - 1]]
@@ -145,7 +151,29 @@ mkMap = WState (mkSnake $ Coord 25 12) width height mkBounds
     width = 50
     height = 25
 
-runStep :: WState -> WState
-runStep m =
-  let newSnake = moveSnake $ mSnake m
-   in m {mSnake = newSnake}
+initAppMem :: IO AppMem
+initAppMem = do
+  m <- newMVar mkMap
+  pure $ AppMem m
+
+runStep :: AppMem -> IO ()
+runStep (AppMem mem) = do
+  modifyMVar_ mem modify
+  where
+    modify :: WState -> IO WState
+    modify s =
+      let newSnake = moveSnake $ mSnake s
+       in pure $ s {mSnake = newSnake}
+
+setDirection :: AppMem -> Direction -> IO ()
+setDirection (AppMem mem) dir = do
+  modifyMVar_ mem modify
+  where
+    modify :: WState -> IO WState
+    modify s =
+      pure $ s {mSnake = setSnakeDirection dir $ mSnake s}
+
+getWorld :: AppMem -> IO World
+getWorld (AppMem mem) = do
+  s <- readMVar mem
+  pure $ stateToWorld s

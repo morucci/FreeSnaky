@@ -4,14 +4,14 @@ let
 
   inherit (nixpkgs) pkgs;
 
-  f = { mkDerivation, base, lib, relude }:
+  f = { mkDerivation, base, brick, lib, relude, vty }:
       mkDerivation {
         pname = "FreeSnaky";
         version = "0.1.0.0";
         src = ./.;
         isLibrary = true;
         isExecutable = true;
-        libraryHaskellDepends = [ base relude ];
+        libraryHaskellDepends = [ base brick relude vty ];
         executableHaskellDepends = [ base relude ];
         homepage = "https://github.com/morucci/FreeSnaky#README.md";
         description = "Free Snaky";

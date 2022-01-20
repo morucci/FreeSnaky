@@ -8,24 +8,25 @@ import Control.Concurrent (forkIO, threadDelay)
 import qualified Graphics.Vty as V
 import Relude
 import Snake
-  ( Coord (Coord),
+  ( AppMem,
     Direction (DOWN, LEFT, RIGHT, UP),
     Item (BL, SB),
-    SnakeBody (SnakeBody),
-    WState (mHeight, mSnake, mWidth),
-    World (wFlattenedMap),
+    World (wFlattenedMap, wHeight, wStatus, wWidth),
     getWorld,
-    mkMap,
-    moveSnake,
+    initAppMem,
     runStep,
-    setSnakeDirection,
+    setDirection,
   )
 
-data Tick = Tick
+newtype Tick = Tick World
 
 data Name = MainView deriving (Eq, Ord, Show)
 
-newtype AppState = AppState {appWState :: WState}
+data AppState = AppState
+  { appWState :: World,
+    -- TODO: appMem must not be required after client/server segmentation
+    appMem :: AppMem
+  }
 
 drawUI :: AppState -> [Widget Name]
 drawUI s = [withBorderStyle BS.unicodeBold $ B.borderWithLabel (str "Free Snaky") $ vBox rows]
@@ -39,13 +40,13 @@ drawUI s = [withBorderStyle BS.unicodeBold $ B.borderWithLabel (str "Free Snaky"
         Just _ -> str " "
         Nothing -> str " Out of bounds"
       Nothing -> error "Out of bounds"
-    height = mHeight $ appWState s
-    width = mWidth $ appWState s
-    m = wFlattenedMap $ getWorld (appWState s)
+    height = wHeight $ appWState s
+    width = wWidth $ appWState s
+    m = wFlattenedMap $ appWState s
 
 handleEvent :: AppState -> BrickEvent Name Tick -> EventM Name (Next AppState)
 handleEvent s (VtyEvent (V.EvKey V.KEsc [])) = halt s
-handleEvent s (AppEvent Tick) = continue . AppState . runStep $ appWState s
+handleEvent s (AppEvent (Tick w)) = continue $ s {appWState = w}
 handleEvent s (VtyEvent (V.EvKey V.KRight [])) = handleDirEvent s RIGHT
 handleEvent s (VtyEvent (V.EvKey V.KLeft [])) = handleDirEvent s LEFT
 handleEvent s (VtyEvent (V.EvKey V.KUp [])) = handleDirEvent s UP
@@ -54,10 +55,8 @@ handleEvent s _ = continue s
 
 handleDirEvent :: AppState -> Snake.Direction -> EventM Name (Next AppState)
 handleDirEvent s dir = do
-  let smap = appWState s
-      newSnake = setSnakeDirection dir $ mSnake smap
-      newState = smap {mSnake = newSnake}
-  continue s {appWState = newState}
+  liftIO $ setDirection (appMem s) dir
+  continue s
 
 theMap :: AttrMap
 theMap = attrMap V.defAttr []
@@ -75,10 +74,14 @@ app =
 main :: IO ()
 main = do
   chan <- newBChan 10
-  let initialState = AppState mkMap
+  mem <- initAppMem
+  initialWorld <- getWorld mem
+  let initialState = AppState initialWorld mem
       buildVty = V.mkVty V.defaultConfig
   initialVty <- buildVty
   void . forkIO . forever $ do
-    writeBChan chan Tick
+    runStep mem
+    world <- getWorld mem
+    writeBChan chan $ Tick world
     threadDelay 500000
   void $ customMain initialVty buildVty (Just chan) app initialState
