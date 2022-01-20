@@ -9,11 +9,13 @@ import qualified Graphics.Vty as V
 import Relude
 import Snake
   ( AppMem,
-    Direction (DOWN, LEFT, RIGHT, UP),
-    Item (BL, SB),
-    World (wFlattenedMap, wHeight, wStatus, wWidth),
+    Direction (..),
+    Item (..),
+    WStatus (..),
+    World (..),
     getWorld,
     initAppMem,
+    resetAppMem,
     runStep,
     setDirection,
   )
@@ -35,9 +37,10 @@ drawUI s = [withBorderStyle BS.unicodeBold $ B.borderWithLabel (str "Free Snaky"
     cellsInRow y = [drawCoord (x, y) | x <- [0 .. width -1]]
     drawCoord (x, y) = case m !!? x of
       Just r -> case r !!? y of
-        Just (Just (SB _)) -> str "o"
-        Just (Just (BL _)) -> str "#"
-        Just _ -> str " "
+        Just SB -> str "o"
+        Just BL -> str "#"
+        Just Void -> str " "
+        Just COLLISION -> str "X"
         Nothing -> str " Out of bounds"
       Nothing -> error "Out of bounds"
     height = wHeight $ appWState s
@@ -46,7 +49,7 @@ drawUI s = [withBorderStyle BS.unicodeBold $ B.borderWithLabel (str "Free Snaky"
 
 handleEvent :: AppState -> BrickEvent Name Tick -> EventM Name (Next AppState)
 handleEvent s (VtyEvent (V.EvKey V.KEsc [])) = halt s
-handleEvent s (AppEvent (Tick w)) = continue $ s {appWState = w}
+handleEvent s (AppEvent (Tick newWorld)) = continue $ s {appWState = newWorld}
 handleEvent s (VtyEvent (V.EvKey V.KRight [])) = handleDirEvent s RIGHT
 handleEvent s (VtyEvent (V.EvKey V.KLeft [])) = handleDirEvent s LEFT
 handleEvent s (VtyEvent (V.EvKey V.KUp [])) = handleDirEvent s UP
@@ -84,4 +87,5 @@ main = do
     world <- getWorld mem
     writeBChan chan $ Tick world
     threadDelay 500000
+    when (wStatus world == GAMEOVER) $ resetAppMem mem
   void $ customMain initialVty buildVty (Just chan) app initialState

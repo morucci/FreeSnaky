@@ -2,11 +2,13 @@ module Snake
   ( runStep,
     getWorld,
     initAppMem,
-    World (wStatus, wFlattenedMap, wHeight, wWidth),
-    Item (SB, BL),
-    Direction (RIGHT, LEFT, UP, DOWN),
+    resetAppMem,
+    World (..),
+    Item (..),
+    Direction (..),
     setDirection,
     AppMem,
+    WStatus (..),
   )
 where
 
@@ -19,7 +21,7 @@ newtype SnakeBody = SnakeBody Coord deriving (Show)
 
 newtype Block = Block Coord deriving (Show)
 
-data Item = SB SnakeBody | BL Block deriving (Show)
+data Item = SB | BL | COLLISION | Void deriving (Show, Eq)
 
 type Snaky = [SnakeBody]
 
@@ -27,7 +29,7 @@ data Direction = UP | DOWN | RIGHT | LEFT deriving (Show, Eq)
 
 data MovingSnaky = MovingSnaky {direction :: Direction, snake :: Snaky} deriving (Show)
 
-data WStatus = GAMEOVER | RUNNING deriving (Show)
+data WStatus = GAMEOVER | RUNNING deriving (Show, Eq)
 
 newtype AppMem = AppMem (MVar WState)
 
@@ -44,7 +46,7 @@ data World = World
   { wHeight :: Int,
     wWidth :: Int,
     wStatus :: WStatus,
-    wFlattenedMap :: [[Maybe Item]]
+    wFlattenedMap :: [[Item]]
   }
   deriving (Show)
 
@@ -117,27 +119,34 @@ getSnakeLength (MovingSnaky _ s) = length s
 
 stateToWorld :: WState -> World
 stateToWorld wm =
-  let wStatus = RUNNING
-      wFlattenedMap = reverse $ foldr buildRow [] [0 .. mWidth wm - 1]
+  let wStatus = getStatus $ concat flattened
+      flattened = reverse $ foldr buildRow [] [0 .. mWidth wm - 1]
+      wFlattenedMap = flattened
       wHeight = mHeight wm
       wWidth = mWidth wm
    in World {..}
   where
+    getStatus :: [Item] -> WStatus
+    getStatus items = if COLLISION `elem` items then GAMEOVER else RUNNING
     buildRow x acc = acc <> [foldr (buildCol x) [] [0 .. mHeight wm - 1]]
-    buildCol :: Int -> Int -> [Maybe Item] -> [Maybe Item]
+    buildCol :: Int -> Int -> [Item] -> [Item]
     buildCol x y acc' = acc' <> [getItem wm (Coord x y)]
-
-getItem :: WState -> Coord -> Maybe Item
-getItem wm coord = isSnakeBody <|> isBlock
-  where
-    isSnakeBody =
-      case filter (\(SnakeBody c) -> c == coord) $ snake $ mSnake wm of
-        [] -> Nothing
-        x : _ -> Just $ SB x
-    isBlock =
-      case filter (\(Block c) -> c == coord) $ mBlocks wm of
-        [] -> Nothing
-        x : _ -> Just $ BL x
+    getItem :: WState -> Coord -> Item
+    getItem wm coord =
+      case (isSnakeBody, isBlock) of
+        (Just sb, Nothing) -> sb
+        (Nothing, Just blk) -> blk
+        (Nothing, Nothing) -> Void
+        (Just _, Just _) -> COLLISION
+      where
+        isSnakeBody =
+          case filter (\(SnakeBody c) -> c == coord) $ snake $ mSnake wm of
+            [] -> Nothing
+            _ -> Just SB
+        isBlock =
+          case filter (\(Block c) -> c == coord) $ mBlocks wm of
+            [] -> Nothing
+            _ -> Just BL
 
 mkMap :: WState
 mkMap = WState (mkSnake $ Coord 25 12) width height mkBounds
@@ -155,6 +164,13 @@ initAppMem :: IO AppMem
 initAppMem = do
   m <- newMVar mkMap
   pure $ AppMem m
+
+resetAppMem :: AppMem -> IO ()
+resetAppMem (AppMem mem) = do
+  modifyMVar_ mem modify
+  where
+    modify :: WState -> IO WState
+    modify _ = pure mkMap
 
 runStep :: AppMem -> IO ()
 runStep (AppMem mem) = do
