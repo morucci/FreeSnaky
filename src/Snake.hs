@@ -14,6 +14,7 @@ where
 
 import Control.Concurrent.MVar
 import Relude hiding (newEmptyMVar, newMVar, putMVar, readMVar)
+import System.Random (randomRIO)
 
 data Coord = Coord {x :: Int, y :: Int} deriving (Show, Eq)
 
@@ -21,7 +22,9 @@ newtype SnakeBody = SnakeBody Coord deriving (Show)
 
 newtype Block = Block Coord deriving (Show)
 
-data Item = SB | BL | COLLISION | Void deriving (Show, Eq)
+newtype Food = Food Coord deriving (Show)
+
+data Item = SB | BL | FD | COLLISION | Void deriving (Show, Eq)
 
 type Snaky = [SnakeBody]
 
@@ -37,7 +40,8 @@ data WState = WState
   { mSnake :: MovingSnaky,
     mWidth :: Int,
     mHeight :: Int,
-    mBlocks :: [Block]
+    mBlocks :: [Block],
+    mFood :: Food
   }
   deriving (Show)
 
@@ -133,11 +137,12 @@ stateToWorld wm =
     buildCol x y acc' = acc' <> [getItem wm (Coord x y)]
     getItem :: WState -> Coord -> Item
     getItem wm coord =
-      case (isSnakeBody, isBlock) of
-        (Just sb, Nothing) -> sb
-        (Nothing, Just blk) -> blk
-        (Nothing, Nothing) -> Void
-        (Just _, Just _) -> COLLISION
+      case (isSnakeBody, isBlock, isFood) of
+        (Just sb, Nothing, Nothing) -> sb
+        (Nothing, Just blk, Nothing) -> blk
+        (Just _, Just _, Nothing) -> COLLISION
+        (Nothing, Nothing, Just fd) -> fd
+        _ -> Void
       where
         isSnakeBody =
           case filter (\(SnakeBody c) -> c == coord) $ snake $ mSnake wm of
@@ -147,9 +152,24 @@ stateToWorld wm =
           case filter (\(Block c) -> c == coord) $ mBlocks wm of
             [] -> Nothing
             _ -> Just BL
+        isFood =
+          let (Food c) = mFood wm
+           in if c == coord then Just FD else Nothing
 
-mkMap :: WState
-mkMap = WState (mkSnake $ Coord 25 12) width height mkBounds
+getRandomCoord :: Int -> Int -> IO Coord
+getRandomCoord width height = do
+  x <- randomRIO (minWidth, maxWidth)
+  y <- randomRIO (minHeight, maxHeight)
+  pure $ Coord x y
+  where
+    maxWidth = width - 2
+    maxHeight = height - 2
+    minWidth = 1
+    minHeight = 1
+
+mkMap :: IO WState
+mkMap = do
+  WState (mkSnake $ Coord 25 12) width height mkBounds <$> mkFood
   where
     mkBounds :: [Block]
     mkBounds =
@@ -157,12 +177,17 @@ mkMap = WState (mkSnake $ Coord 25 12) width height mkBounds
         <> [Block $ Coord (width -1) y | y <- [0 .. height]]
         <> [Block $ Coord x 0 | x <- [0 .. width]]
         <> [Block $ Coord x (height -1) | x <- [0 .. width]]
+    mkFood :: IO Food
+    mkFood = do
+      coord <- getRandomCoord width height
+      pure $ Food coord
     width = 50
     height = 25
 
 initAppMem :: IO AppMem
 initAppMem = do
-  m <- newMVar mkMap
+  m' <- mkMap
+  m <- newMVar m'
   pure $ AppMem m
 
 resetAppMem :: AppMem -> IO ()
@@ -170,7 +195,7 @@ resetAppMem (AppMem mem) = do
   modifyMVar_ mem modify
   where
     modify :: WState -> IO WState
-    modify _ = pure mkMap
+    modify _ = mkMap
 
 runStep :: AppMem -> IO ()
 runStep (AppMem mem) = do

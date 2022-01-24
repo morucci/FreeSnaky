@@ -20,6 +20,7 @@ common common-options
                       , NoImplicitPrelude
                       , OverloadedStrings
                       , RecordWildCards
+                      , NamedFieldPuns
 
 library
     import:           common-options
@@ -29,6 +30,7 @@ library
                     , relude ^>=1.0.0.1
                     , brick  ^>=0.64
                     , vty    ^>=5.33
+                    , random ^>=1.2.1
     hs-source-dirs:   src
 
 executable FreeSnaky
