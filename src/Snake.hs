@@ -41,7 +41,8 @@ data WState = WState
     mWidth :: Int,
     mHeight :: Int,
     mBlocks :: [Block],
-    mFood :: Food
+    mFood :: Food,
+    mStatus :: WStatus
   }
   deriving (Show)
 
@@ -123,38 +124,37 @@ getSnakeLength (MovingSnaky _ s) = length s
 
 stateToWorld :: WState -> World
 stateToWorld wm =
-  let wStatus = getStatus $ concat flattened
+  let wStatus = mStatus wm
       flattened = reverse $ foldr buildRow [] [0 .. mWidth wm - 1]
       wFlattenedMap = flattened
       wHeight = mHeight wm
       wWidth = mWidth wm
    in World {..}
   where
-    getStatus :: [Item] -> WStatus
-    getStatus items = if COLLISION `elem` items then GAMEOVER else RUNNING
     buildRow x acc = acc <> [foldr (buildCol x) [] [0 .. mHeight wm - 1]]
     buildCol :: Int -> Int -> [Item] -> [Item]
     buildCol x y acc' = acc' <> [getItem wm (Coord x y)]
-    getItem :: WState -> Coord -> Item
-    getItem wm coord =
-      case (isSnakeBody, isBlock, isFood) of
-        (Just sb, Nothing, Nothing) -> sb
-        (Nothing, Just blk, Nothing) -> blk
-        (Just _, Just _, Nothing) -> COLLISION
-        (Nothing, Nothing, Just fd) -> fd
-        _ -> Void
-      where
-        isSnakeBody =
-          case filter (\(SnakeBody c) -> c == coord) $ snake $ mSnake wm of
-            [] -> Nothing
-            _ -> Just SB
-        isBlock =
-          case filter (\(Block c) -> c == coord) $ mBlocks wm of
-            [] -> Nothing
-            _ -> Just BL
-        isFood =
-          let (Food c) = mFood wm
-           in if c == coord then Just FD else Nothing
+
+getItem :: WState -> Coord -> Item
+getItem wm coord =
+  case (isSnakeBody, isBlock, isFood) of
+    (Just sb, Nothing, Nothing) -> sb
+    (Nothing, Just blk, Nothing) -> blk
+    (Just _, Just _, Nothing) -> COLLISION
+    (Nothing, Nothing, Just fd) -> fd
+    _ -> Void
+  where
+    isSnakeBody =
+      case filter (\(SnakeBody c) -> c == coord) $ snake $ mSnake wm of
+        [] -> Nothing
+        _ -> Just SB
+    isBlock =
+      case filter (\(Block c) -> c == coord) $ mBlocks wm of
+        [] -> Nothing
+        _ -> Just BL
+    isFood =
+      let (Food c) = mFood wm
+       in if c == coord then Just FD else Nothing
 
 getRandomCoord :: Int -> Int -> IO Coord
 getRandomCoord width height = do
@@ -169,7 +169,8 @@ getRandomCoord width height = do
 
 mkMap :: IO WState
 mkMap = do
-  WState (mkSnake $ Coord 25 12) width height mkBounds <$> mkFood
+  food <- mkFood
+  pure $ WState (mkSnake $ Coord 25 12) width height mkBounds food RUNNING
   where
     mkBounds :: [Block]
     mkBounds =
@@ -202,9 +203,15 @@ runStep (AppMem mem) = do
   modifyMVar_ mem modify
   where
     modify :: WState -> IO WState
-    modify s =
+    modify s = do
       let newSnake = moveSnake $ mSnake s
-       in pure $ s {mSnake = newSnake}
+          newSnakeCoord = getSnakeCoord newSnake
+          onItem = getItem s newSnakeCoord
+      pure $
+        s
+          { mSnake = newSnake,
+            mStatus = if onItem == BL then GAMEOVER else RUNNING
+          }
 
 setDirection :: AppMem -> Direction -> IO ()
 setDirection (AppMem mem) dir = do
