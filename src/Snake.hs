@@ -169,7 +169,7 @@ getRandomCoord width height = do
 
 mkMap :: IO WState
 mkMap = do
-  food <- mkFood
+  food <- mkFood width height
   pure $ WState (mkSnake $ Coord 25 12) width height mkBounds food RUNNING
   where
     mkBounds :: [Block]
@@ -178,12 +178,13 @@ mkMap = do
         <> [Block $ Coord (width -1) y | y <- [0 .. height]]
         <> [Block $ Coord x 0 | x <- [0 .. width]]
         <> [Block $ Coord x (height -1) | x <- [0 .. width]]
-    mkFood :: IO Food
-    mkFood = do
-      coord <- getRandomCoord width height
-      pure $ Food coord
     width = 50
     height = 25
+
+mkFood :: Int -> Int -> IO Food
+mkFood width height = do
+  coord <- getRandomCoord width height
+  pure $ Food coord
 
 initAppMem :: IO AppMem
 initAppMem = do
@@ -206,12 +207,12 @@ runStep (AppMem mem) = do
     modify s = do
       let newSnake = moveSnake $ mSnake s
           newSnakeCoord = getSnakeCoord newSnake
-          onItem = getItem s newSnakeCoord
-      pure $
-        s
-          { mSnake = newSnake,
-            mStatus = if onItem == BL then GAMEOVER else RUNNING
-          }
+      case getItem s newSnakeCoord of
+        BL -> pure $ s {mSnake = newSnake, mStatus = GAMEOVER}
+        FD -> do
+          newFood <- mkFood (mWidth s) (mHeight s)
+          pure $ s {mSnake = moveAndIncreaseSnake $ mSnake s, mFood = newFood}
+        _otherwise -> pure $ s {mSnake = newSnake}
 
 setDirection :: AppMem -> Direction -> IO ()
 setDirection (AppMem mem) dir = do
