@@ -42,7 +42,8 @@ data WState = WState
     mHeight :: Int,
     mBlocks :: [Block],
     mFood :: Food,
-    mStatus :: WStatus
+    mStatus :: WStatus,
+    mSpeedFactor :: Float
   }
   deriving (Show)
 
@@ -51,7 +52,8 @@ data World = World
   { wHeight :: Int,
     wWidth :: Int,
     wStatus :: WStatus,
-    wFlattenedMap :: [[Item]]
+    wFlattenedMap :: [[Item]],
+    wSpeedFactor :: Float
   }
   deriving (Show)
 
@@ -129,6 +131,7 @@ stateToWorld wm =
       wFlattenedMap = flattened
       wHeight = mHeight wm
       wWidth = mWidth wm
+      wSpeedFactor = mSpeedFactor wm
    in World {..}
   where
     buildRow x acc = acc <> [foldr (buildCol x) [] [0 .. mHeight wm - 1]]
@@ -170,7 +173,7 @@ getRandomCoord width height = do
 mkMap :: IO WState
 mkMap = do
   food <- mkFood width height
-  pure $ WState (mkSnake $ Coord 25 12) width height mkBounds food RUNNING
+  pure $ WState (mkSnake $ Coord 25 12) width height mkBounds food RUNNING 1.0
   where
     mkBounds :: [Block]
     mkBounds =
@@ -211,7 +214,12 @@ runStep (AppMem mem) = do
         BL -> pure $ s {mSnake = newSnake, mStatus = GAMEOVER}
         FD -> do
           newFood <- mkFood (mWidth s) (mHeight s)
-          pure $ s {mSnake = moveAndIncreaseSnake $ mSnake s, mFood = newFood}
+          pure $
+            s
+              { mSnake = moveAndIncreaseSnake $ mSnake s,
+                mFood = newFood,
+                mSpeedFactor = mSpeedFactor s * 1.1
+              }
         _otherwise -> pure $ s {mSnake = newSnake}
 
 setDirection :: AppMem -> Direction -> IO ()

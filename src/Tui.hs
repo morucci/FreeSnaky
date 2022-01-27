@@ -82,11 +82,12 @@ main = do
   initialWorld <- getWorld mem
   let initialState = AppState initialWorld mem
       buildVty = V.mkVty V.defaultConfig
+      initialSpeed = 500000
   initialVty <- buildVty
   void . forkIO . forever $ do
     runStep mem
     world <- getWorld mem
     writeBChan chan $ Tick world
-    threadDelay 500000
+    threadDelay $ truncate $ initialSpeed / wSpeedFactor world
     when (wStatus world == GAMEOVER) $ resetAppMem mem
   void $ customMain initialVty buildVty (Just chan) app initialState
