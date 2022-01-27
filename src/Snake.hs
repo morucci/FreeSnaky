@@ -60,16 +60,16 @@ data World = World
 -- >>> mkSnake $ Coord 5 5
 -- MovingSnaky {direction = UP, snake = [SnakeBody (Coord {x = 5, y = 5}),SnakeBody (Coord {x = 5, y = 4})]}
 mkSnake :: Coord -> MovingSnaky
-mkSnake (Coord ix iy) = MovingSnaky UP $ foldr func [] $ mkSnake 3
+mkSnake (Coord ix iy) = MovingSnaky UP $ foldr func [] $ mkSnake' 3
   where
     func :: Coord -> Snaky -> Snaky
     func (Coord _ _) acc = acc <> [SnakeBody $ Coord ix (iy - length acc)]
-    mkSnake length = replicate length (Coord 0 0)
+    mkSnake' = flip replicate (Coord 0 0)
 
 -- >>> moveSnake . mkSnake $ Coord 5 5
 -- MovingSnaky {direction = UP, snake = [SnakeBody (Coord {x = 5, y = 6}),SnakeBody (Coord {x = 5, y = 5}),SnakeBody (Coord {x = 5, y = 4})]}
 moveSnake :: MovingSnaky -> MovingSnaky
-moveSnake ms@MovingSnaky {..} =
+moveSnake MovingSnaky {..} =
   MovingSnaky direction $ case direction of
     UP -> move snake shiftU
     DOWN -> move snake shiftD
@@ -79,12 +79,12 @@ moveSnake ms@MovingSnaky {..} =
     move :: Snaky -> (SnakeBody -> SnakeBody) -> Snaky
     move s sfunc = case s of
       [] -> error "Invalid Snaky"
-      co : cos -> let head = sfunc co in [head] <> shiftBody co cos
+      x : xs -> let head' = sfunc x in [head'] <> shiftBody x xs
 
     shiftBody :: SnakeBody -> Snaky -> Snaky
     shiftBody c s = case s of
       [] -> s
-      co : cos -> [c] <> shiftBody co cos
+      x : xs -> [c] <> shiftBody x xs
 
     shiftU (SnakeBody (Coord x y)) = SnakeBody $ Coord x (y + 1)
     shiftD (SnakeBody (Coord x y)) = SnakeBody $ Coord x (y - 1)
@@ -94,12 +94,12 @@ moveSnake ms@MovingSnaky {..} =
 -- >>> moveAndIncreaseSnake . mkSnake $ Coord 5 5
 -- MovingSnaky {direction = UP, snake = [SnakeBody (Coord {x = 5, y = 6}),SnakeBody (Coord {x = 5, y = 5}),SnakeBody (Coord {x = 5, y = 4}),SnakeBody (Coord {x = 5, y = 3})]}
 moveAndIncreaseSnake :: MovingSnaky -> MovingSnaky
-moveAndIncreaseSnake ms@(MovingSnaky dir s) =
-  let tail = case reverse s of
+moveAndIncreaseSnake ms@(MovingSnaky _ s) =
+  let tail' = case reverse s of
         [] -> error "Invalid Snaky"
         co : _ -> co
       newMS = moveSnake ms
-   in newMS {snake = snake newMS <> [tail]}
+   in newMS {snake = snake newMS <> [tail']}
 
 -- >>> setSnakeDirection RIGHT $ mkSnake $ Coord 5 5
 -- MovingSnaky {direction = RIGHT, snake = [SnakeBody (Coord {x = 5, y = 5}),SnakeBody (Coord {x = 5, y = 4})]}
@@ -118,11 +118,6 @@ getSnakeCoord :: MovingSnaky -> Coord
 getSnakeCoord (MovingSnaky _ s) = case s of
   SnakeBody co : _ -> co
   [] -> error "Invalid Snaky"
-
--- >>> getSnakeLength . mkSnake $ Coord 5 5
--- 2
-getSnakeLength :: MovingSnaky -> Int
-getSnakeLength (MovingSnaky _ s) = length s
 
 stateToWorld :: WState -> World
 stateToWorld wm =
@@ -197,17 +192,17 @@ initAppMem = do
 
 resetAppMem :: AppMem -> IO ()
 resetAppMem (AppMem mem) = do
-  modifyMVar_ mem modify
+  modifyMVar_ mem doM
   where
-    modify :: WState -> IO WState
-    modify _ = mkMap
+    doM :: WState -> IO WState
+    doM _ = mkMap
 
 runStep :: AppMem -> IO ()
 runStep (AppMem mem) = do
-  modifyMVar_ mem modify
+  modifyMVar_ mem doM
   where
-    modify :: WState -> IO WState
-    modify s = do
+    doM :: WState -> IO WState
+    doM s = do
       let newSnake = moveSnake $ mSnake s
           newSnakeCoord = getSnakeCoord newSnake
       case getItem s newSnakeCoord of
@@ -224,10 +219,10 @@ runStep (AppMem mem) = do
 
 setDirection :: AppMem -> Direction -> IO ()
 setDirection (AppMem mem) dir = do
-  modifyMVar_ mem modify
+  modifyMVar_ mem doM
   where
-    modify :: WState -> IO WState
-    modify s =
+    doM :: WState -> IO WState
+    doM s =
       pure $ s {mSnake = setSnakeDirection dir $ mSnake s}
 
 getWorld :: AppMem -> IO World
