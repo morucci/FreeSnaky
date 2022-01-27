@@ -31,9 +31,9 @@ library
     build-depends:    base          ^>=4.14.3.0
                     , relude
                     , brick
-                    , vty 
-                    , random 
-                    , websockets 
+                    , vty
+                    , random
+                    , websockets
     hs-source-dirs:   src
 
 executable FreeSnaky
