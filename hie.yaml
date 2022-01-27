@@ -1,0 +1,7 @@
+cradle:
+  cabal:
+    - path: "src"
+      component: "lib:FreeSnaky"
+
+    - path: "app/Main.hs"
+      component: "FreeSnaky:exe:FreeSnaky"
