@@ -28,11 +28,13 @@ library
     exposed-modules:  Snake
                     , Tui
                     , Server
+                    , Client
     build-depends:    base          ^>=4.14.3.0
                     , relude
                     , brick
                     , vty
                     , random
+                    , network
                     , websockets
     hs-source-dirs:   src
 
