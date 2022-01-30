@@ -13,6 +13,7 @@ module Snake
 where
 
 import Control.Concurrent.MVar
+import Data.Aeson (FromJSON, ToJSON)
 import Relude hiding (newEmptyMVar, newMVar, putMVar, readMVar)
 import System.Random (randomRIO)
 
@@ -24,17 +25,25 @@ newtype Block = Block Coord deriving (Show)
 
 newtype Food = Food Coord deriving (Show)
 
-data Item = SB | BL | FD | COLLISION | Void deriving (Show, Eq)
+data Item = SB | BL | FD | COLLISION | Void deriving (Show, Eq, Generic)
 
 type Snaky = [SnakeBody]
 
-data Direction = UP | DOWN | RIGHT | LEFT deriving (Show, Eq)
+data Direction = UP | DOWN | RIGHT | LEFT deriving (Show, Eq, Generic)
 
 data MovingSnaky = MovingSnaky {direction :: Direction, snake :: Snaky} deriving (Show)
 
-data WStatus = GAMEOVER | RUNNING deriving (Show, Eq)
+data WStatus = GAMEOVER | RUNNING deriving (Show, Eq, Generic)
 
 newtype AppMem = AppMem (MVar WState)
+
+instance ToJSON Direction
+
+instance FromJSON Direction
+
+instance ToJSON WStatus
+
+instance ToJSON Item
 
 data WState = WState
   { mSnake :: MovingSnaky,
@@ -55,7 +64,9 @@ data World = World
     wFlattenedMap :: [[Item]],
     wSpeedFactor :: Float
   }
-  deriving (Show)
+  deriving (Show, Generic)
+
+instance ToJSON World
 
 -- >>> mkSnake $ Coord 5 5
 -- MovingSnaky {direction = UP, snake = [SnakeBody (Coord {x = 5, y = 5}),SnakeBody (Coord {x = 5, y = 4})]}

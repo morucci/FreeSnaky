@@ -21,6 +21,7 @@ common common-options
                       , OverloadedStrings
                       , RecordWildCards
                       , NamedFieldPuns
+                      , DeriveGeneric
     ghc-options:        -Wall
 
 library
@@ -30,6 +31,7 @@ library
                     , Server
                     , Client
     build-depends:    base          ^>=4.14.3.0
+                    , aeson
                     , relude
                     , brick
                     , vty

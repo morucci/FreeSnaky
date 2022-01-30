@@ -2,9 +2,11 @@ module Server where
 
 import Control.Concurrent as C (modifyMVar, modifyMVar_, newMVar, readMVar)
 import Control.Exception (finally)
+import Data.Aeson (ToJSON)
 import qualified Data.Text as T
 import qualified Network.WebSockets as WS
 import Relude
+import Snake (Direction, World)
 
 type Client = (Text, WS.Connection)
 
@@ -70,3 +72,14 @@ talk (user, conn) s = forever $ do
   C.readMVar s
     >>= broadcast
       (user `mappend` ": " `mappend` msg)
+
+data ProtoMessages
+  = Hello
+  | StartGame
+  | MoveSnake Direction
+  | Tick World
+  | EndGame
+  | Bye
+  deriving (Show, Generic)
+
+instance ToJSON ProtoMessages
