@@ -2,7 +2,7 @@ module Server where
 
 import Control.Concurrent as C (modifyMVar, modifyMVar_, newMVar, readMVar)
 import Control.Exception (finally)
-import Data.Aeson (ToJSON)
+import Data.Aeson (FromJSON, ToJSON, decode, encode)
 import qualified Data.Text as T
 import qualified Network.WebSockets as WS
 import Relude
@@ -37,6 +37,11 @@ main = do
   s <- C.newMVar newServerState
   WS.runServer "127.0.0.1" 9160 $ application s
 
+main2 :: IO ()
+main2 = do
+  s <- C.newMVar newServerState
+  WS.runServer "127.0.0.1" 9160 $ application2 s
+
 application :: MVar ServerState -> WS.ServerApp
 application st pending = do
   conn <- WS.acceptRequest pending
@@ -66,6 +71,33 @@ application st pending = do
               let s' = removeClient client s in return (s', s')
             broadcast (fst client <> " disconnected") s
 
+application2 :: MVar ServerState -> WS.ServerApp
+application2 stM pending = do
+  conn <- WS.acceptRequest pending
+  WS.withPingThread conn 30 (pure ()) $ do
+    clients <- C.readMVar stM
+    msg <- getProtoMessage conn
+    case msg of
+      Nothing -> print ("Unknown message" :: Text)
+      Just (Hello ident) -> do
+        print $ "Received HELLO ident: " <> ident
+        if clientExists (ident, conn) clients
+          then do
+            print ("Client exists. Sending Bye." :: Text)
+            WS.sendTextData conn $ encode Bye
+          else do
+            modifyMVar_ stM $ \st -> do
+              print ("Client new. Sending Welcome." :: Text)
+              WS.sendTextData conn $ encode Welcome
+              pure $ addClient (ident, conn) st
+      Just _ -> print ("Not Implemented" :: Text)
+    pure ()
+
+getProtoMessage :: WS.Connection -> IO (Maybe ProtoMessages)
+getProtoMessage conn = do
+  jsonMsg <- WS.receiveData conn
+  pure $ decode jsonMsg
+
 talk :: Client -> MVar ServerState -> IO ()
 talk (user, conn) s = forever $ do
   msg <- WS.receiveData conn
@@ -74,7 +106,8 @@ talk (user, conn) s = forever $ do
       (user `mappend` ": " `mappend` msg)
 
 data ProtoMessages
-  = Hello
+  = Hello Text
+  | Welcome
   | StartGame
   | MoveSnake Direction
   | Tick World
@@ -83,3 +116,5 @@ data ProtoMessages
   deriving (Show, Generic)
 
 instance ToJSON ProtoMessages
+
+instance FromJSON ProtoMessages

@@ -43,7 +43,11 @@ instance FromJSON Direction
 
 instance ToJSON WStatus
 
+instance FromJSON WStatus
+
 instance ToJSON Item
+
+instance FromJSON Item
 
 data WState = WState
   { mSnake :: MovingSnaky,
@@ -67,6 +71,8 @@ data World = World
   deriving (Show, Generic)
 
 instance ToJSON World
+
+instance FromJSON World
 
 -- >>> mkSnake $ Coord 5 5
 -- MovingSnaky {direction = UP, snake = [SnakeBody (Coord {x = 5, y = 5}),SnakeBody (Coord {x = 5, y = 4})]}
