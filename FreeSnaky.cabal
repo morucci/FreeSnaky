@@ -32,11 +32,13 @@ library
                     , Client
     build-depends:    base          ^>=4.14.3.0
                     , aeson
+                    , async
                     , relude
                     , brick
                     , vty
                     , random
                     , network
+                    , say
                     , websockets
     hs-source-dirs:   src
 

@@ -4,8 +4,8 @@ let
 
   inherit (nixpkgs) pkgs;
 
-  f = { mkDerivation, aeson, base, brick, lib, network, random
-      , relude, vty, websockets
+  f = { mkDerivation, aeson, async, base, brick, lib, network
+      , random, relude, say, vty, websockets
       }:
       mkDerivation {
         pname = "FreeSnaky";
@@ -14,7 +14,7 @@ let
         isLibrary = true;
         isExecutable = true;
         libraryHaskellDepends = [
-          aeson base brick network random relude vty websockets
+          aeson async base brick network random relude say vty websockets
         ];
         executableHaskellDepends = [ base relude ];
         homepage = "https://github.com/morucci/FreeSnaky#README.md";

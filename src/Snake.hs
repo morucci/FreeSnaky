@@ -9,6 +9,7 @@ module Snake
     setDirection,
     AppMem,
     WStatus (..),
+    WState,
   )
 where
 
