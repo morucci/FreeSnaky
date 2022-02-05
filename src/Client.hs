@@ -7,7 +7,7 @@ import Network.Socket (withSocketsDo)
 import qualified Network.WebSockets as WS
 import Relude
 import Say (say)
-import Server (ProtoMessages (Bye, Hello, MoveSnake, Tick, Welcome), getProtoMessage)
+import Server (ProtoMessages (Bye, Hello, SnakeDirection, Tick, Welcome), getProtoMessage)
 import Snake (Direction (RIGHT))
 
 logText :: Text -> IO ()
@@ -40,7 +40,7 @@ app conn = do
         sendCommands :: IO ()
         sendCommands = do
           threadDelay 1000000
-          WS.sendTextData conn $ encode (MoveSnake RIGHT)
+          WS.sendTextData conn $ encode (SnakeDirection RIGHT)
           sendCommands
         readMessages :: IO ()
         readMessages = do

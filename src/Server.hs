@@ -7,7 +7,7 @@ import Network.WebSockets (Connection)
 import qualified Network.WebSockets as WS
 import Relude
 import Say (say)
-import Snake (AppMem, Direction, World, getWorld, initAppMem, runStep)
+import Snake (AppMem, Direction, World, getWorld, initAppMem, runStep, setDirection)
 
 data Client = Client
   { cIdent :: Text,
@@ -74,14 +74,18 @@ application stM pending = do
     handle :: Client -> IO ()
     handle Client {..} = do
       wStateM <- initAppMem
-      concurrently_ (handleInputCommands cConn) (handleGameState wStateM)
+      concurrently_ (handleInputCommands cConn wStateM) (handleGameState wStateM)
       where
-        handleInputCommands :: Connection -> IO ()
-        handleInputCommands conn = run
+        handleInputCommands :: Connection -> AppMem -> IO ()
+        handleInputCommands conn appMem = run
           where
             run = do
-              _ <- getProtoMessage conn
-              logText $ "Got Input from " <> cIdent
+              resp <- getProtoMessage conn
+              case resp of
+                SnakeDirection dir -> do
+                  setDirection appMem dir
+                  logText $ "Got SnakeDirection from " <> cIdent
+                _ -> logText $ "Unexpected command from " <> cIdent
               run
         handleGameState :: AppMem -> IO ()
         handleGameState wStateM = run
@@ -100,7 +104,7 @@ application stM pending = do
 data ProtoMessages
   = Hello Text
   | Welcome
-  | MoveSnake Direction
+  | SnakeDirection Direction
   | Tick World
   | Bye
   deriving (Show, Generic)
