@@ -29,7 +29,6 @@ library
     exposed-modules:  Snake
                     , Tui
                     , Server
-                    , Client
     build-depends:    base          ^>=4.14.3.0
                     , aeson
                     , async

@@ -7,7 +7,7 @@ import Network.WebSockets (Connection)
 import qualified Network.WebSockets as WS
 import Relude
 import Say (say)
-import Snake (AppMem, Direction, World, getWorld, initAppMem, runStep, setDirection)
+import Snake (AppMem, Direction, WStatus (GAMEOVER), World (wSpeedFactor), getStatus, getWorld, initAppMem, resetAppMem, runStep, setDirection)
 
 data Client = Client
   { cIdent :: Text,
@@ -92,13 +92,13 @@ application stM pending = do
           where
             tickDelay = 500000
             run = do
-              threadDelay tickDelay
-              modifyMVar_ stM $ \st -> do
-                runStep wStateM
-                world <- getWorld wStateM
-                logText $ "Sending tick to client " <> cIdent
-                WS.sendTextData cConn $ encode $ Tick world
-                pure st
+              runStep wStateM
+              status <- getStatus wStateM
+              when (status == GAMEOVER) $ do resetAppMem wStateM
+              world <- getWorld wStateM
+              logText $ "Sending tick to client " <> cIdent
+              WS.sendTextData cConn $ encode $ Tick world
+              threadDelay $ truncate $ tickDelay / wSpeedFactor world
               run
 
 data ProtoMessages

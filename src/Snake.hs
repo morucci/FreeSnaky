@@ -10,6 +10,7 @@ module Snake
     AppMem,
     WStatus (..),
     WState,
+    getStatus,
   )
 where
 
@@ -207,6 +208,11 @@ initAppMem = do
   m' <- mkMap
   m <- newMVar m'
   pure $ AppMem m
+
+getStatus :: AppMem -> IO WStatus
+getStatus (AppMem mem) = do
+  wStateM <- readMVar mem
+  pure $ mStatus wStateM
 
 resetAppMem :: AppMem -> IO ()
 resetAppMem (AppMem mem) = do
