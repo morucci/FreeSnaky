@@ -1,16 +1,30 @@
+-- |
+-- Module      : Snake
+-- Description : Manage the Snake game state
+-- Copyright   : (c) Fabien Boucher, 2022
+-- License     : MIT
+-- Maintainer  : fabien.dot.boucher@gmail.com
+--
+-- This module contains data types and fucntion to manage the
+-- the Snake game state.
 module Snake
-  ( runStep,
-    getWorld,
-    initAppMem,
-    resetAppMem,
+  ( -- * Types
+    Direction (..),
     World (..),
     Item (..),
-    Direction (..),
-    setDirection,
-    AppMem,
     WStatus (..),
-    WState,
+    AppMem,
+
+    -- * Functions to change the game state
+    initAppMem,
+    resetAppMem,
+    runStep,
+    setDirection,
+
+    -- * Functions to get game states
     getStatus,
+    getSpeedFactor,
+    getWorld,
   )
 where
 
@@ -69,6 +83,7 @@ data WState = WState
   }
   deriving (Show)
 
+-- | A newtype which contains a Mvar of WState
 newtype AppMem = AppMem (MVar WState)
 
 -- API data to interface with a client
@@ -129,9 +144,7 @@ data World = World
     -- | The gate status
     wStatus :: WStatus,
     -- | The flattened representation of the game map
-    wFlattenedMap :: [[Item]],
-    -- | The game speed factor
-    wSpeedFactor :: Float
+    wFlattenedMap :: [[Item]]
   }
   deriving (Show, Generic)
 
@@ -144,7 +157,7 @@ instance FromJSON World
 
 -- | Create a Snake at a given coordinate
 -- >>> mkSnake $ Coord 5 5
--- MovingSnaky {direction = UP, snake = [SnakeBody (Coord {x = 5, y = 5}),SnakeBody (Coord {x = 5, y = 4})]}
+-- MovingSnaky {direction = UP, snake = [SnakeBody (Coord {x = 5, y = 5}),SnakeBody (Coord {x = 5, y = 4}),SnakeBody (Coord {x = 5, y = 3})]}
 mkSnake :: Coord -> MovingSnaky
 mkSnake (Coord ix iy) = MovingSnaky UP $ foldr func [] $ mkSnake' 3
   where
@@ -153,7 +166,6 @@ mkSnake (Coord ix iy) = MovingSnaky UP $ foldr func [] $ mkSnake' 3
     mkSnake' = flip replicate (Coord 0 0)
 
 -- | Move a Snake according to its current direction
--- >>> moveSnake . mkSnake $ Coord 5 5
 -- MovingSnaky {direction = UP, snake = [SnakeBody (Coord {x = 5, y = 6}),SnakeBody (Coord {x = 5, y = 5}),SnakeBody (Coord {x = 5, y = 4})]}
 moveSnake :: MovingSnaky -> MovingSnaky
 moveSnake MovingSnaky {..} =
@@ -217,7 +229,6 @@ stateToWorld wm =
       wFlattenedMap = flattened
       wHeight = mHeight wm
       wWidth = mWidth wm
-      wSpeedFactor = mSpeedFactor wm
    in World {..}
   where
     buildRow x acc = acc <> [foldr (buildCol x) [] [0 .. mHeight wm - 1]]
@@ -294,6 +305,12 @@ getStatus :: AppMem -> IO WStatus
 getStatus (AppMem mem) = do
   wStateM <- readMVar mem
   pure $ mStatus wStateM
+
+-- | Get the game speed factor
+getSpeedFactor :: AppMem -> IO Float
+getSpeedFactor (AppMem mem) = do
+  wStateM <- readMVar mem
+  pure $ mSpeedFactor wStateM
 
 -- | Reset the game
 resetAppMem :: AppMem -> IO ()
