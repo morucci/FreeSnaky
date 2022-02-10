@@ -3,18 +3,38 @@ module Server where
 import Control.Concurrent as C (modifyMVar_, newMVar, readMVar, threadDelay)
 import Control.Concurrent.Async (concurrently_)
 import Data.Aeson (FromJSON, ToJSON, decode, encode)
-import Network.WebSockets (Connection)
 import qualified Network.WebSockets as WS
 import Relude
 import Say (say)
-import Snake (AppMem, Direction, WStatus (GAMEOVER), World, getSpeedFactor, getStatus, getWorld, initAppMem, resetAppMem, runStep, setDirection)
+import Snake
+  ( AppMem,
+    Direction,
+    WStatus (GAMEOVER),
+    World,
+    getSpeedFactor,
+    getStatus,
+    getWorld,
+    initAppMem,
+    resetAppMem,
+    runStep,
+    setDirection,
+  )
 
-data Client = Client
-  { cIdent :: Text,
-    cConn :: WS.Connection
-  }
+data ProtoMessages
+  = Hello Text
+  | Welcome
+  | SnakeDirection Direction
+  | Tick World
+  | Bye
+  deriving (Show, Generic)
 
-type ServerState = [Client]
+instance ToJSON ProtoMessages
+
+instance FromJSON ProtoMessages
+
+type ClientID = Text
+
+type ServerState = [ClientID]
 
 newServerState :: ServerState
 newServerState = []
@@ -22,10 +42,10 @@ newServerState = []
 numClients :: ServerState -> Int
 numClients = length
 
-clientExists :: Client -> ServerState -> Bool
-clientExists (Client ident _) st = ident `elem` (cIdent <$> st)
+clientExists :: ClientID -> ServerState -> Bool
+clientExists = elem
 
-addClient :: Client -> ServerState -> ServerState
+addClient :: ClientID -> ServerState -> ServerState
 addClient client clients = client : clients
 
 logText :: Text -> IO ()
@@ -49,67 +69,49 @@ application stM pending = do
   WS.withPingThread conn 30 (pure ()) $ do
     msg <- getProtoMessage conn
     case msg of
-      Hello ident -> do
-        let cIdent = ident
-            cConn = conn
-         in handleHello $ Client {..}
+      Hello ident -> handleClient ident conn
       _ -> logText "Protocol violation. Expected Hello."
-    pure ()
   where
-    handleHello :: Client -> IO ()
-    handleHello client@Client {..} = do
+    handleClient :: ClientID -> WS.Connection -> IO ()
+    handleClient client conn = do
       clients <- C.readMVar stM
-      logText $ "Received HELLO ident: " <> cIdent
+      logText $ "Incomming client: " <> client
       if clientExists client clients
         then do
           logText "Client exists. Sending Bye."
-          WS.sendTextData cConn $ encode Bye
+          WS.sendTextData conn $ encode Bye
         else do
           modifyMVar_ stM $ \st -> do
             logText "Client new. Sending Welcome."
-            WS.sendTextData cConn $ encode Welcome
+            WS.sendTextData conn $ encode Welcome
             pure $ addClient client st
-          handle client
+          handleGame client conn
 
-    handle :: Client -> IO ()
-    handle Client {..} = do
+    handleGame :: ClientID -> WS.Connection -> IO ()
+    handleGame client conn = do
       wStateM <- initAppMem
-      concurrently_ (handleInputCommands cConn wStateM) (handleGameState wStateM)
+      concurrently_
+        (handleInputCommands wStateM)
+        (handleGameState wStateM)
       where
-        handleInputCommands :: Connection -> AppMem -> IO ()
-        handleInputCommands conn appMem = run
-          where
-            run = do
-              resp <- getProtoMessage conn
-              case resp of
-                SnakeDirection dir -> do
-                  setDirection appMem dir
-                  logText $ "Got SnakeDirection from " <> cIdent
-                _ -> logText $ "Unexpected command from " <> cIdent
-              run
+        initialTickDelay = 500000
+        handleInputCommands :: AppMem -> IO ()
+        handleInputCommands appMem = do
+          resp <- getProtoMessage conn
+          case resp of
+            SnakeDirection dir -> do
+              setDirection appMem dir
+              logText $ "Got SnakeDirection from " <> client
+            _ -> logText $ "Unexpected command from " <> client
+          handleInputCommands appMem
         handleGameState :: AppMem -> IO ()
-        handleGameState wStateM = run
-          where
-            tickDelay = 500000
-            run = do
-              runStep wStateM
-              status <- getStatus wStateM
-              speedFactor <- getSpeedFactor wStateM
-              when (status == GAMEOVER) $ do resetAppMem wStateM
-              world <- getWorld wStateM
-              logText $ "Sending tick to client " <> cIdent
-              WS.sendTextData cConn $ encode $ Tick world
-              threadDelay $ truncate $ tickDelay / speedFactor
-              run
-
-data ProtoMessages
-  = Hello Text
-  | Welcome
-  | SnakeDirection Direction
-  | Tick World
-  | Bye
-  deriving (Show, Generic)
-
-instance ToJSON ProtoMessages
-
-instance FromJSON ProtoMessages
+        handleGameState appMem = do
+          runStep appMem
+          status <- getStatus appMem
+          speedFactor <- getSpeedFactor appMem
+          when (status == GAMEOVER) $ do resetAppMem appMem
+          world <- getWorld appMem
+          logText $ "Sending tick to client " <> client
+          WS.sendTextData conn $ encode $ Tick world
+          threadDelay $ truncate $ initialTickDelay / speedFactor
+          handleGameState appMem
