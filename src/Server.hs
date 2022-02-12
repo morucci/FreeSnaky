@@ -19,7 +19,7 @@ module Server
 
     -- * Functions to start the server
     runServer,
-    runLocalServer,
+    runServerLocal,
   )
 where
 
@@ -86,19 +86,6 @@ addClient client clients = client : clients
 logText :: Text -> IO ()
 logText = say
 
--- Functions to start start the server
---------------------------------------
-
--- | Run a local server on port 9160
-runLocalServer :: IO ()
-runLocalServer = runServer "127.0.0.1" 9160
-
--- | Run a server
-runServer :: Text -> Int -> IO ()
-runServer addr port = do
-  s <- C.newMVar newServerState
-  WS.runServer (toString addr) port $ application s
-
 -- | The connection handler
 application :: MVar ServerState -> WS.ServerApp
 application stM pending = do
@@ -152,3 +139,16 @@ application stM pending = do
           WS.sendTextData conn $ encode $ Tick world
           threadDelay $ truncate $ initialTickDelay / speedFactor
           handleGameState appMem
+
+-- Functions to start start the server
+--------------------------------------
+
+-- | Run a local server on port 9160
+runServerLocal :: IO ()
+runServerLocal = runServer "127.0.0.1" 9160
+
+-- | Run a server
+runServer :: Text -> Int -> IO ()
+runServer addr port = do
+  s <- C.newMVar newServerState
+  WS.runServer (toString addr) port $ application s
