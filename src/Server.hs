@@ -30,6 +30,7 @@ import Control.Concurrent as C
     threadDelay,
   )
 import Control.Concurrent.Async (concurrently_)
+import Control.Exception (throwIO, try)
 import Data.Aeson (FromJSON, ToJSON, decode, encode)
 import qualified Network.WebSockets as WS
 import Relude
@@ -58,10 +59,15 @@ instance FromJSON ProtoMessage
 -- | Read a 'ProtoMessage' message on the WS
 getProtoMessage :: WS.Connection -> IO ProtoMessage
 getProtoMessage conn = do
-  jsonMsg <- WS.receiveData conn
-  case decode jsonMsg of
-    Just msg -> pure msg
-    Nothing -> error "Protocol violation. Unabled to decode message."
+  receivedDataE <- try $ WS.receiveData conn
+  case receivedDataE of
+    Right jsonData -> case decode jsonData of
+      Just msg -> pure msg
+      Nothing -> error "Protocol violation. Unabled to decode message."
+    Left (WS.CloseRequest _code _msg) -> pure Bye
+    Left unHandledException -> do
+      logText $ "Received unhandled execption " <> show unHandledException
+      throwIO unHandledException
 
 -- Various types and functions to handle the Server state
 ---------------------------------------------------------
@@ -81,6 +87,10 @@ clientExists = elem
 -- | Add a new client to the Server state
 addClient :: ClientID -> ServerState -> ServerState
 addClient client clients = client : clients
+
+-- | Remove a client from the Server state
+removeClient :: ClientID -> ServerState -> ServerState
+removeClient client = filter (/= client)
 
 -- | A logger function
 logText :: Text -> IO ()
@@ -103,7 +113,7 @@ application stM pending = do
       if clientExists client clients
         then do
           logText "Client exists. Sending Bye."
-          WS.sendTextData conn $ encode Bye
+          WS.sendClose conn $ encode Bye
         else do
           modifyMVar_ stM $ \st -> do
             logText "Client new. Sending Welcome."
@@ -114,6 +124,8 @@ application stM pending = do
     handleGame :: ClientID -> WS.Connection -> IO ()
     handleGame client conn = do
       wStateM <- initAppMem
+      -- TODO: add cleanup function for when server stop
+      -- a sendClose is sent to all clients
       concurrently_
         (handleInputCommands wStateM)
         (handleGameState wStateM)
@@ -126,6 +138,11 @@ application stM pending = do
             SnakeDirection dir -> do
               setDirection appMem dir
               logText $ "Got SnakeDirection from " <> client
+            Bye -> do
+              modifyMVar_ stM $ \st -> do
+                logText $ "Got Bye message from " <> client
+                pure $ removeClient client st
+              error "End" -- Force both threads to end
             _ -> logText $ "Unexpected command from " <> client
           handleInputCommands appMem
         handleGameState :: AppMem -> IO ()
@@ -133,10 +150,10 @@ application stM pending = do
           runStep appMem
           status <- getStatus appMem
           speedFactor <- getSpeedFactor appMem
-          when (status == GAMEOVER) $ do resetAppMem appMem
           world <- getWorld appMem
           logText $ "Sending tick to client " <> client
           WS.sendTextData conn $ encode $ Tick world
+          when (status == GAMEOVER) $ do resetAppMem appMem
           threadDelay $ truncate $ initialTickDelay / speedFactor
           handleGameState appMem
 

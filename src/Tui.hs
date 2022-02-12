@@ -70,7 +70,10 @@ drawUI (SnakeAppState (Just S.World {..}) _conn) =
 -- | Handle application events
 handleEvent :: SnakeAppState -> BrickEvent Name Tick -> EventM Name (Next SnakeAppState)
 handleEvent s@(SnakeAppState _ conn) event = case event of
-  VtyEvent (V.EvKey V.KEsc []) -> halt s
+  VtyEvent (V.EvKey V.KEsc []) -> do
+    liftIO $ WS.sendClose conn $ encode S.Bye
+    void . liftIO $ S.getProtoMessage conn
+    halt s
   AppEvent (Tick newWorld) -> continue $ s {appWState = Just newWorld}
   VtyEvent (V.EvKey V.KRight []) -> handleDirEvent S.RIGHT
   VtyEvent (V.EvKey V.KLeft []) -> handleDirEvent S.LEFT
@@ -98,9 +101,8 @@ brickApp =
     theMap = attrMap V.defAttr []
 
 -- | Client App to run once the WS is connected
-runClientApp :: WS.ClientApp ()
-runClientApp conn = do
-  let clientId = "fakeid"
+runClientApp :: Text -> WS.ClientApp ()
+runClientApp clientId conn = do
   WS.sendTextData conn $ encode (S.Hello clientId)
   resp <- S.getProtoMessage conn
   case resp of
@@ -111,9 +113,8 @@ runClientApp conn = do
       initialVty <- buildVty
       withAsync (readServerMessages chan) $ \_ -> do
         void $ customMain initialVty buildVty (Just chan) brickApp initialState
-    S.Bye -> do
-      pure ()
-    _ -> print ("Not Implemented" :: Text)
+    S.Bye -> print ("Client already connected" :: Text)
+    _ -> print ("Unhandled server message" :: Text)
   where
     readServerMessages :: BChan Tick -> IO ()
     readServerMessages chan = do
@@ -121,18 +122,23 @@ runClientApp conn = do
       case resp of
         S.Tick world -> do
           writeBChan chan $ Tick world
-        _ -> pure ()
-      readServerMessages chan
+          readServerMessages chan
+        S.Bye -> do
+          -- TODO: update SnakeAppState to warn UI about server disconnection
+          print ("Server closed connection" :: Text)
+        _ -> do
+          -- TODO: update SnakeAppState to warn UI about server disconnection
+          print ("Unhandled server message" :: Text)
 
 -- Main functions
 -----------------
 
 -- | Run a TUI Client
-runClient :: Text -> Int -> IO ()
-runClient addr port =
+runClient :: Text -> Int -> Text -> IO ()
+runClient addr port ident =
   withSocketsDo $
-    WS.runClient (toString addr) port "/" runClientApp
+    WS.runClient (toString addr) port "/" $ runClientApp ident
 
 -- | Run a TUI Client by connection on the local server
-runClientLocal :: IO ()
+runClientLocal :: Text -> IO ()
 runClientLocal = runClient "127.0.0.1" 9160
