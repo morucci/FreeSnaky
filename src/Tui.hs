@@ -11,7 +11,7 @@ import Network.Socket (withSocketsDo)
 import qualified Network.WebSockets as WS
 import Relude
 import qualified Server as S
-  ( ProtoMessages (Bye, Hello, SnakeDirection, Tick, Welcome),
+  ( ProtoMessages (Bye, Hello, SnakeDirection, Tick),
     getProtoMessage,
   )
 import Snake
@@ -88,7 +88,7 @@ main = withSocketsDo $ WS.runClient "127.0.0.1" 9160 "/" runApp
       WS.sendTextData conn $ encode (S.Hello clientId)
       resp <- S.getProtoMessage conn
       case resp of
-        S.Welcome -> do
+        S.Hello _ -> do
           chan <- newBChan 10
           let initialState = AppState Nothing conn
               buildVty = V.mkVty V.defaultConfig

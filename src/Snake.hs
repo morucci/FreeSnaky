@@ -1,12 +1,12 @@
 -- |
 -- Module      : Snake
--- Description : Manage the Snake game state
+-- Description : The Snake game engine
 -- Copyright   : (c) Fabien Boucher, 2022
 -- License     : MIT
 -- Maintainer  : fabien.dot.boucher@gmail.com
 --
--- This module contains data types and fucntion to manage the
--- the Snake game state.
+-- This module contains data types and function to manage the
+-- the Snake game engine
 module Snake
   ( -- * Types
     Direction (..),

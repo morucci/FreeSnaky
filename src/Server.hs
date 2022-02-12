@@ -1,56 +1,56 @@
-module Server where
+-- |
+-- Module      : Snake
+-- Description : WebSocket interface to the Snake game
+-- Copyright   : (c) Fabien Boucher, 2022
+-- License     : MIT
+-- Maintainer  : fabien.dot.boucher@gmail.com
+--
+-- This module contains a WS server and a protocol to allow WS client
+-- to interact with the Snake game
+module Server
+  ( -- * Protocol Types
+    ProtoMessages (..),
 
-import Control.Concurrent as C (modifyMVar_, newMVar, readMVar, threadDelay)
+    -- * Read message on the WS
+    getProtoMessage,
+
+    -- * Functions to start the server
+    runServer,
+    runLocalServer,
+  )
+where
+
+import Control.Concurrent as C
+  ( modifyMVar_,
+    newMVar,
+    readMVar,
+    threadDelay,
+  )
 import Control.Concurrent.Async (concurrently_)
 import Data.Aeson (FromJSON, ToJSON, decode, encode)
 import qualified Network.WebSockets as WS
 import Relude
 import Say (say)
 import Snake
-  ( AppMem,
-    Direction,
-    WStatus (GAMEOVER),
-    World,
-    getSpeedFactor,
-    getStatus,
-    getWorld,
-    initAppMem,
-    resetAppMem,
-    runStep,
-    setDirection,
-  )
 
+-- Protocol used on the WebSocket
+---------------------------------
 data ProtoMessages
-  = Hello Text
-  | Welcome
-  | SnakeDirection Direction
-  | Tick World
-  | Bye
+  = -- | Handcheck message
+    Hello Text
+  | -- | Set snake direction message
+    SnakeDirection Direction
+  | -- | Tick message (propagate the current game state representation)
+    Tick World
+  | -- | Bye message
+    Bye
   deriving (Show, Generic)
 
 instance ToJSON ProtoMessages
 
 instance FromJSON ProtoMessages
 
-type ClientID = Text
-
-type ServerState = [ClientID]
-
-newServerState :: ServerState
-newServerState = []
-
-numClients :: ServerState -> Int
-numClients = length
-
-clientExists :: ClientID -> ServerState -> Bool
-clientExists = elem
-
-addClient :: ClientID -> ServerState -> ServerState
-addClient client clients = client : clients
-
-logText :: Text -> IO ()
-logText = say
-
+-- | Read a 'ProtoMessage' message on the WS
 getProtoMessage :: WS.Connection -> IO ProtoMessages
 getProtoMessage conn = do
   jsonMsg <- WS.receiveData conn
@@ -58,11 +58,43 @@ getProtoMessage conn = do
     Just msg -> pure msg
     Nothing -> error "Protocol violation. Unabled to decode message."
 
-main :: IO ()
-main = do
-  s <- C.newMVar newServerState
-  WS.runServer "127.0.0.1" 9160 $ application s
+-- Various types and functions to handle the Server state
+---------------------------------------------------------
 
+type ClientID = Text
+
+type ServerState = [ClientID]
+
+-- | Create a new server state
+newServerState :: ServerState
+newServerState = []
+
+-- | Check client exists
+clientExists :: ClientID -> ServerState -> Bool
+clientExists = elem
+
+-- | Add a new client to the Server state
+addClient :: ClientID -> ServerState -> ServerState
+addClient client clients = client : clients
+
+-- | A logger function
+logText :: Text -> IO ()
+logText = say
+
+-- Functions to start start the server
+--------------------------------------
+
+-- | Run a local server on port 9160
+runLocalServer :: IO ()
+runLocalServer = runServer "127.0.0.1" 9160
+
+-- | Run a server
+runServer :: Text -> Int -> IO ()
+runServer addr port = do
+  s <- C.newMVar newServerState
+  WS.runServer (toString addr) port $ application s
+
+-- | The connection handler
 application :: MVar ServerState -> WS.ServerApp
 application stM pending = do
   conn <- WS.acceptRequest pending
@@ -83,7 +115,7 @@ application stM pending = do
         else do
           modifyMVar_ stM $ \st -> do
             logText "Client new. Sending Welcome."
-            WS.sendTextData conn $ encode Welcome
+            WS.sendTextData conn $ encode $ Hello client
             pure $ addClient client st
           handleGame client conn
 
