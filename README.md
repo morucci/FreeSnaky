@@ -33,5 +33,5 @@ cabal repl
 
 ```
 cabal repl
-λ> runLocalClient
+λ> runLocalClient "my name"
 ```
