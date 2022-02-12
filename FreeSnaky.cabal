@@ -46,7 +46,7 @@ executable FreeSnaky
     main-is:          Main.hs
 
     build-depends:    base ^>=4.14.3.0
-                    , relude ^>=1.0.0.1
+                    , relude
                     , FreeSnaky
 
     hs-source-dirs:   app
