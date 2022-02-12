@@ -1,4 +1,17 @@
-module Tui where
+-- |
+-- Module      : Tui
+-- Description : A terminal UI WebSocket client for the Snake game
+-- Copyright   : (c) Fabien Boucher, 2022
+-- License     : MIT
+-- Maintainer  : fabien.dot.boucher@gmail.com
+--
+-- This module a terminal UI WebSocket client for the Snake game
+module Tui
+  ( -- * Function to start the TUI client
+    runClient,
+    runClientLocal,
+  )
+where
 
 import Brick
 import Brick.BChan
@@ -11,27 +24,30 @@ import Network.Socket (withSocketsDo)
 import qualified Network.WebSockets as WS
 import Relude
 import qualified Server as S
-  ( ProtoMessages (Bye, Hello, SnakeDirection, Tick),
-    getProtoMessage,
-  )
-import Snake
   ( Direction (..),
     Item (..),
+    ProtoMessage (..),
     World (..),
+    getProtoMessage,
   )
 
-newtype Tick = Tick World
+-- Various types for the Brick Engine
+-------------------------------------
+
+newtype Tick = Tick S.World
 
 data Name = MainView deriving (Eq, Ord, Show)
 
-data AppState = AppState
-  { appWState :: Maybe World,
-    appConn :: WS.Connection
+-- | A data type that keep track of the application State
+data SnakeAppState = SnakeAppState
+  { appWState :: Maybe S.World,
+    _appConn :: WS.Connection
   }
 
-drawUI :: AppState -> [Widget Name]
-drawUI (AppState Nothing _conn) = [vBox [str "Waiting for server map"]]
-drawUI (AppState (Just World {..}) _conn) =
+-- | Draw the UI according to the 'SnakeAppState'
+drawUI :: SnakeAppState -> [Widget Name]
+drawUI (SnakeAppState Nothing _conn) = [vBox [str "Waiting for server map"]]
+drawUI (SnakeAppState (Just S.World {..}) _conn) =
   [ withBorderStyle BS.unicodeBold $
       B.borderWithLabel (str "Free Snaky") $ vBox rows
   ]
@@ -40,37 +56,36 @@ drawUI (AppState (Just World {..}) _conn) =
     cellsInRow y = [drawCoord (x, y) | x <- [0 .. width -1]]
     drawCoord (x, y) = case m !!? x of
       Just r -> case r !!? y of
-        Just SB -> str "o"
-        Just BL -> str "#"
-        Just Void -> str " "
-        Just FD -> str "F"
-        Just COLLISION -> str "X"
+        Just S.SB -> str "o"
+        Just S.BL -> str "#"
+        Just S.Void -> str " "
+        Just S.FD -> str "F"
+        Just S.COLLISION -> str "X"
         Nothing -> str " Out of bounds"
       Nothing -> error "Out of bounds"
     height = wHeight
     width = wWidth
     m = wFlattenedMap
 
-handleEvent :: AppState -> BrickEvent Name Tick -> EventM Name (Next AppState)
-handleEvent s@(AppState _ conn) event = case event of
+-- | Handle application events
+handleEvent :: SnakeAppState -> BrickEvent Name Tick -> EventM Name (Next SnakeAppState)
+handleEvent s@(SnakeAppState _ conn) event = case event of
   VtyEvent (V.EvKey V.KEsc []) -> halt s
   AppEvent (Tick newWorld) -> continue $ s {appWState = Just newWorld}
-  VtyEvent (V.EvKey V.KRight []) -> handleDirEvent RIGHT
-  VtyEvent (V.EvKey V.KLeft []) -> handleDirEvent LEFT
-  VtyEvent (V.EvKey V.KUp []) -> handleDirEvent UP
-  VtyEvent (V.EvKey V.KDown []) -> handleDirEvent DOWN
+  VtyEvent (V.EvKey V.KRight []) -> handleDirEvent S.RIGHT
+  VtyEvent (V.EvKey V.KLeft []) -> handleDirEvent S.LEFT
+  VtyEvent (V.EvKey V.KUp []) -> handleDirEvent S.UP
+  VtyEvent (V.EvKey V.KDown []) -> handleDirEvent S.DOWN
   _ -> continue s
   where
-    handleDirEvent :: Snake.Direction -> EventM Name (Next AppState)
+    handleDirEvent :: S.Direction -> EventM Name (Next SnakeAppState)
     handleDirEvent dir = do
       liftIO $ WS.sendTextData conn $ encode (S.SnakeDirection dir)
       continue s
 
-theMap :: AttrMap
-theMap = attrMap V.defAttr []
-
-app :: App AppState Tick Name
-app =
+-- | The Brick application definition
+brickApp :: App SnakeAppState Tick Name
+brickApp =
   App
     { appDraw = drawUI,
       appChooseCursor = neverShowCursor,
@@ -78,32 +93,46 @@ app =
       appStartEvent = return,
       appAttrMap = const theMap
     }
-
-main :: IO ()
-main = withSocketsDo $ WS.runClient "127.0.0.1" 9160 "/" runApp
   where
-    runApp :: WS.ClientApp ()
-    runApp conn = do
-      let clientId = "fakeid"
-      WS.sendTextData conn $ encode (S.Hello clientId)
+    theMap :: AttrMap
+    theMap = attrMap V.defAttr []
+
+-- | Client App to run once the WS is connected
+runClientApp :: WS.ClientApp ()
+runClientApp conn = do
+  let clientId = "fakeid"
+  WS.sendTextData conn $ encode (S.Hello clientId)
+  resp <- S.getProtoMessage conn
+  case resp of
+    S.Hello _ -> do
+      chan <- newBChan 10
+      let initialState = SnakeAppState Nothing conn
+          buildVty = V.mkVty V.defaultConfig
+      initialVty <- buildVty
+      withAsync (readServerMessages chan) $ \_ -> do
+        void $ customMain initialVty buildVty (Just chan) brickApp initialState
+    S.Bye -> do
+      pure ()
+    _ -> print ("Not Implemented" :: Text)
+  where
+    readServerMessages :: BChan Tick -> IO ()
+    readServerMessages chan = do
       resp <- S.getProtoMessage conn
       case resp of
-        S.Hello _ -> do
-          chan <- newBChan 10
-          let initialState = AppState Nothing conn
-              buildVty = V.mkVty V.defaultConfig
-          initialVty <- buildVty
-          withAsync (readServerMessages chan) $ \_ -> do
-            void $ customMain initialVty buildVty (Just chan) app initialState
-        S.Bye -> do
-          pure ()
-        _ -> print ("Not Implemented" :: Text)
-      where
-        readServerMessages :: BChan Tick -> IO ()
-        readServerMessages chan = do
-          resp <- S.getProtoMessage conn
-          case resp of
-            S.Tick world -> do
-              writeBChan chan $ Tick world
-            _ -> pure ()
-          readServerMessages chan
+        S.Tick world -> do
+          writeBChan chan $ Tick world
+        _ -> pure ()
+      readServerMessages chan
+
+-- Main functions
+-----------------
+
+-- | Run a TUI Client
+runClient :: Text -> Int -> IO ()
+runClient addr port =
+  withSocketsDo $
+    WS.runClient (toString addr) port "/" runClientApp
+
+-- | Run a TUI Client by connection on the local server
+runClientLocal :: IO ()
+runClientLocal = runClient "127.0.0.1" 9160

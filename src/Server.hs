@@ -1,5 +1,5 @@
 -- |
--- Module      : Snake
+-- Module      : Server
 -- Description : WebSocket interface to the Snake game
 -- Copyright   : (c) Fabien Boucher, 2022
 -- License     : MIT
@@ -9,7 +9,10 @@
 -- to interact with the Snake game
 module Server
   ( -- * Protocol Types
-    ProtoMessages (..),
+    ProtoMessage (..),
+    Direction (..),
+    Item (..),
+    World (..),
 
     -- * Read message on the WS
     getProtoMessage,
@@ -35,7 +38,9 @@ import Snake
 
 -- Protocol used on the WebSocket
 ---------------------------------
-data ProtoMessages
+
+-- | Message of the Protocol
+data ProtoMessage
   = -- | Handcheck message
     Hello Text
   | -- | Set snake direction message
@@ -46,12 +51,12 @@ data ProtoMessages
     Bye
   deriving (Show, Generic)
 
-instance ToJSON ProtoMessages
+instance ToJSON ProtoMessage
 
-instance FromJSON ProtoMessages
+instance FromJSON ProtoMessage
 
 -- | Read a 'ProtoMessage' message on the WS
-getProtoMessage :: WS.Connection -> IO ProtoMessages
+getProtoMessage :: WS.Connection -> IO ProtoMessage
 getProtoMessage conn = do
   jsonMsg <- WS.receiveData conn
   case decode jsonMsg of
