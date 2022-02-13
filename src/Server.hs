@@ -147,14 +147,14 @@ application stM pending = do
           handleInputCommands appMem
         handleGameState :: AppMem -> IO ()
         handleGameState appMem = do
-          runStep appMem
-          status <- getStatus appMem
-          speedFactor <- getSpeedFactor appMem
-          world <- getWorld appMem
-          logText $ "Sending tick to client " <> client
+          (world, status, speedFactor) <- runStep appMem
           WS.sendTextData conn $ encode $ Tick world
+          logText $ "Sending tick to client " <> client
           when (status == GAMEOVER) $ do resetAppMem appMem
-          threadDelay $ truncate $ initialTickDelay / speedFactor
+          let minDelay = 200000
+              delay = max minDelay $ truncate $ initialTickDelay / speedFactor
+          logText $ "Waiting " <> show delay <> " for client " <> client
+          threadDelay delay
           handleGameState appMem
 
 -- Functions to start start the server

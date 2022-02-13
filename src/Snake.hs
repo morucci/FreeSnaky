@@ -20,11 +20,6 @@ module Snake
     resetAppMem,
     runStep,
     setDirection,
-
-    -- * Functions to get game states
-    getStatus,
-    getSpeedFactor,
-    getWorld,
   )
 where
 
@@ -300,18 +295,6 @@ initAppMem = do
   m <- newMVar m'
   pure $ AppMem m
 
--- | Get the game status
-getStatus :: AppMem -> IO WStatus
-getStatus (AppMem mem) = do
-  wStateM <- readMVar mem
-  pure $ mStatus wStateM
-
--- | Get the game speed factor
-getSpeedFactor :: AppMem -> IO Float
-getSpeedFactor (AppMem mem) = do
-  wStateM <- readMVar mem
-  pure $ mSpeedFactor wStateM
-
 -- | Reset the game
 resetAppMem :: AppMem -> IO ()
 resetAppMem (AppMem mem) = do
@@ -321,15 +304,15 @@ resetAppMem (AppMem mem) = do
     doM _ = mkMap
 
 -- | Perform a Game tick
-runStep :: AppMem -> IO ()
+runStep :: AppMem -> IO (World, WStatus, Float)
 runStep (AppMem mem) = do
-  modifyMVar_ mem doM
+  modifyMVar mem doM
   where
-    doM :: WState -> IO WState
+    doM :: WState -> IO (WState, (World, WStatus, Float))
     doM s = do
       let newSnake = moveSnake $ mSnake s
           newSnakeCoord = getSnakeCoord newSnake
-      case getItem s newSnakeCoord of
+      wst <- case getItem s newSnakeCoord of
         BL -> pure $ s {mSnake = newSnake, mStatus = GAMEOVER}
         FD -> do
           newFood <- mkFood (mWidth s) (mHeight s)
@@ -337,9 +320,10 @@ runStep (AppMem mem) = do
             s
               { mSnake = moveAndIncreaseSnake $ mSnake s,
                 mFood = newFood,
-                mSpeedFactor = mSpeedFactor s * 1.1
+                mSpeedFactor = mSpeedFactor s * 1.05
               }
         _otherwise -> pure $ s {mSnake = newSnake}
+      pure (wst, (stateToWorld wst, mStatus wst, mSpeedFactor wst))
 
 -- | Set Snake direction
 setDirection :: AppMem -> Direction -> IO ()
@@ -349,9 +333,3 @@ setDirection (AppMem mem) dir = do
     doM :: WState -> IO WState
     doM s =
       pure $ s {mSnake = setSnakeDirection dir $ mSnake s}
-
--- | Get the external Game state (World)
-getWorld :: AppMem -> IO World
-getWorld (AppMem mem) = do
-  s <- readMVar mem
-  pure $ stateToWorld s
