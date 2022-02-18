@@ -22,16 +22,21 @@ Then Simply run:
 cabal build
 ```
 
-## Start the Server
+## Start a local party
 
 ```
-cabal repl
-λ> runLocalServer
+cabal run FreeSnaky -- local
 ```
 
-## Start the Terminal Client
+## Client / Server mode
+### Start the Server
 
 ```
-cabal repl
-λ> runLocalClient "my name"
+cabal run FreeSnaky -- server --bindAddress 127.0.0.1
+```
+
+### Start the Terminal Client
+
+```
+cabal run FreeSnaky -- client --address 127.0.0.1
 ```

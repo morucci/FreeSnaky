@@ -66,7 +66,7 @@ getProtoMessage conn = do
       Nothing -> error "Protocol violation. Unabled to decode message."
     Left (WS.CloseRequest _code _msg) -> pure Bye
     Left unHandledException -> do
-      logText $ "Received unhandled execption " <> show unHandledException
+      -- logText $ "Received unhandled execption " <> show unHandledException
       throwIO unHandledException
 
 -- Various types and functions to handle the Server state
@@ -92,13 +92,9 @@ addClient client clients = client : clients
 removeClient :: ClientID -> ServerState -> ServerState
 removeClient client = filter (/= client)
 
--- | A logger function
-logText :: Text -> IO ()
-logText = say
-
 -- | The connection handler
-application :: MVar ServerState -> WS.ServerApp
-application stM pending = do
+application :: (Text -> IO ()) -> MVar ServerState -> WS.ServerApp
+application logText stM pending = do
   conn <- WS.acceptRequest pending
   WS.withPingThread conn 30 (pure ()) $ do
     msg <- getProtoMessage conn
@@ -161,11 +157,12 @@ application stM pending = do
 --------------------------------------
 
 -- | Run a local server on port 9160
-runServerLocal :: IO ()
+runServerLocal :: Maybe (Text -> IO ()) -> IO ()
 runServerLocal = runServer "127.0.0.1" 9160
 
 -- | Run a server
-runServer :: Text -> Int -> IO ()
-runServer addr port = do
+runServer :: Text -> Int -> Maybe (Text -> IO ()) -> IO ()
+runServer addr port loggerM = do
   s <- C.newMVar newServerState
-  WS.runServer (toString addr) port $ application s
+  let logger = fromMaybe say loggerM
+  WS.runServer (toString addr) port $ application logger s
