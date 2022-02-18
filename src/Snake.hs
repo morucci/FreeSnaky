@@ -74,7 +74,9 @@ data WState = WState
     -- | The game status
     mStatus :: WStatus,
     -- | The current game speed factor
-    mSpeedFactor :: Float
+    mSpeedFactor :: Float,
+    -- | The current score
+    mScore :: Int
   }
   deriving (Show)
 
@@ -139,7 +141,9 @@ data World = World
     -- | The gate status
     wStatus :: WStatus,
     -- | The flattened representation of the game map
-    wFlattenedMap :: [[Item]]
+    wFlattenedMap :: [[Item]],
+    -- | The current score
+    wScore :: Int
   }
   deriving (Show, Generic)
 
@@ -224,6 +228,7 @@ stateToWorld wm =
       wFlattenedMap = flattened
       wHeight = mHeight wm
       wWidth = mWidth wm
+      wScore = mScore wm
    in World {..}
   where
     buildRow x acc = acc <> [foldr (buildCol x) [] [0 .. mHeight wm - 1]]
@@ -271,7 +276,15 @@ getRandomCoord width height = do
 mkMap :: IO WState
 mkMap = do
   food <- mkFood width height
-  pure $ WState (mkSnake $ Coord 25 12) width height mkBounds food RUNNING 1.0
+  let mSnake = mkSnake $ Coord 25 12
+      mWidth = width
+      mHeight = height
+      mBlocks = mkBounds
+      mFood = food
+      mStatus = RUNNING
+      mSpeedFactor = 1.0
+      mScore = 0
+  pure $ WState {..}
   where
     mkBounds :: [Block]
     mkBounds =
@@ -314,16 +327,24 @@ runStep (AppMem mem) = do
           newSnakeCoord = getSnakeCoord newSnake
       wst <- case getItem s newSnakeCoord of
         BL -> pure $ s {mSnake = newSnake, mStatus = GAMEOVER}
-        FD -> do
+        FD -> handleStepOnFood
+        _otherwise -> pure $ s {mSnake = newSnake}
+      pure (wst, (stateToWorld wst, mStatus wst, mSpeedFactor wst))
+      where
+        handleStepOnFood :: IO WState
+        handleStepOnFood = do
           newFood <- mkFood (mWidth s) (mHeight s)
+          let newSpeedFactor = computeSpeedFactor $ mSpeedFactor s
           pure $
             s
               { mSnake = moveAndIncreaseSnake $ mSnake s,
                 mFood = newFood,
-                mSpeedFactor = mSpeedFactor s * 1.05
+                mSpeedFactor = newSpeedFactor,
+                mScore = computeScore (mScore s) newSpeedFactor
               }
-        _otherwise -> pure $ s {mSnake = newSnake}
-      pure (wst, (stateToWorld wst, mStatus wst, mSpeedFactor wst))
+          where
+            computeScore score speedFactor = score + truncate (10 * speedFactor)
+            computeSpeedFactor speedFactor = speedFactor * 1.05
 
 -- | Set Snake direction
 setDirection :: AppMem -> Direction -> IO ()

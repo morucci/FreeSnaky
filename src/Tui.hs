@@ -49,9 +49,12 @@ drawUI :: SnakeAppState -> [Widget Name]
 drawUI (SnakeAppState Nothing _conn) = [vBox [str "Waiting for server map"]]
 drawUI (SnakeAppState (Just S.World {..}) _conn) =
   [ withBorderStyle BS.unicodeBold $
-      B.borderWithLabel (str "Free Snaky") $ vBox rows
+      B.borderWithLabel (str "Free Snaky") gameView
   ]
   where
+    gameView = vBox [headerWidget, snakeWorldWidget]
+    headerWidget = str $ "Score: " <> show wScore
+    snakeWorldWidget = vBox rows
     rows = [hBox $ cellsInRow r | r <- [0 .. height -1]]
     cellsInRow y = [drawCoord (x, y) | x <- [0 .. width -1]]
     drawCoord (x, y) = case m !!? x of
