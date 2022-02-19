@@ -77,7 +77,9 @@ data WState = WState
     -- | The current game speed factor
     mSpeedFactor :: Float,
     -- | The current score
-    mScore :: Int
+    mScore :: Int,
+    -- | Generate food
+    mGenFood :: Bool
   }
   deriving (Show)
 
@@ -293,6 +295,7 @@ mkMap = do
       mStatus = RUNNING
       mSpeedFactor = 1.0
       mScore = 0
+      mGenFood = True
   pure $ WState {..}
   where
     mkBounds :: [Block]
@@ -335,20 +338,25 @@ runStep (AppMem mem) = do
       let newSnake = moveSnake $ mSnake s
           newSnakeCoord = getSnakeHeadCoord newSnake
           nextState = s {mSnake = newSnake}
-      wst <- case getItem nextState newSnakeCoord of
+      wst' <- case getItem nextState newSnakeCoord of
         COLLISION -> pure $ nextState {mStatus = GAMEOVER}
         EFD -> handleStepOnFood
         _otherwise -> pure nextState
+      wst <-
+        if mGenFood s
+          then do
+            newFood <- mkFood (mWidth s) (mHeight s)
+            pure $ wst' {mFood = newFood, mGenFood = False}
+          else pure wst'
       pure (wst, (stateToWorld wst, mStatus wst, mSpeedFactor wst))
       where
         handleStepOnFood :: IO WState
         handleStepOnFood = do
-          newFood <- mkFood (mWidth s) (mHeight s)
           let newSpeedFactor = computeSpeedFactor $ mSpeedFactor s
           pure $
             s
               { mSnake = moveAndIncreaseSnake $ mSnake s,
-                mFood = newFood,
+                mGenFood = True,
                 mSpeedFactor = newSpeedFactor,
                 mScore = computeScore (mScore s) newSpeedFactor
               }
