@@ -25,8 +25,9 @@ where
 
 import Control.Concurrent.MVar
 import Data.Aeson (FromJSON, ToJSON)
-import Relude hiding (newEmptyMVar, newMVar, putMVar, readMVar)
+import Relude hiding (head, newEmptyMVar, newMVar, putMVar, readMVar, tail)
 import System.Random (randomRIO)
+import Prelude (head, tail)
 
 -- Internal Game state data
 ---------------------------
@@ -94,6 +95,8 @@ data Item
     BL
   | -- | A Food Item
     FD
+  | -- | A Eaten Food Item
+    EFD
   | -- | A Collision Item
     COLLISION
   | -- | An empty Item
@@ -213,10 +216,10 @@ setSnakeDirection newDir ms@(MovingSnaky dir s)
   | otherwise = MovingSnaky newDir s
 
 -- | Get snake head coordinate
--- >>> getSnakeCoord . mkSnake $ Coord 5 5
+-- >>> getSnakeHeadCoord . mkSnake $ Coord 5 5
 -- Coord {x = 5, y = 5}
-getSnakeCoord :: MovingSnaky -> Coord
-getSnakeCoord (MovingSnaky _ s) = case s of
+getSnakeHeadCoord :: MovingSnaky -> Coord
+getSnakeHeadCoord (MovingSnaky _ s) = case s of
   SnakeBody co : _ -> co
   [] -> error "Invalid Snaky"
 
@@ -238,24 +241,30 @@ stateToWorld wm =
 -- | Get an Item at a given coordinate
 getItem :: WState -> Coord -> Item
 getItem wm coord =
-  case (isSnakeBody, isBlock, isFood) of
-    (Just sb, Nothing, Nothing) -> sb
-    (Nothing, Just blk, Nothing) -> blk
-    (Just _, Just _, Nothing) -> COLLISION
-    (Nothing, Nothing, Just fd) -> fd
+  case (isSnakeHead, isSnakeBody, isBlock, isFood) of
+    (True, True, False, False) -> COLLISION
+    (True, False, True, False) -> COLLISION
+    (True, False, False, False) -> SB
+    (False, True, False, False) -> SB
+    (False, False, True, False) -> BL
+    (False, False, False, True) -> FD
+    (True, False, False, True) -> EFD
     _ -> Void
   where
     isSnakeBody =
-      case filter (\(SnakeBody c) -> c == coord) $ snake $ mSnake wm of
-        [] -> Nothing
-        _ -> Just SB
+      case filter (\(SnakeBody c) -> c == coord) $ tail $ snake $ mSnake wm of
+        [] -> False
+        _ -> True
+    isSnakeHead =
+      let (SnakeBody headCoord) = head $ snake $ mSnake wm
+       in coord == headCoord
     isBlock =
       case filter (\(Block c) -> c == coord) $ mBlocks wm of
-        [] -> Nothing
-        _ -> Just BL
+        [] -> False
+        _ -> True
     isFood =
       let (Food c) = mFood wm
-       in if c == coord then Just FD else Nothing
+       in if c == coord then True else False
 
 -- Non pure IO functions
 ------------------------
@@ -324,11 +333,12 @@ runStep (AppMem mem) = do
     doM :: WState -> IO (WState, (World, WStatus, Float))
     doM s = do
       let newSnake = moveSnake $ mSnake s
-          newSnakeCoord = getSnakeCoord newSnake
-      wst <- case getItem s newSnakeCoord of
-        BL -> pure $ s {mSnake = newSnake, mStatus = GAMEOVER}
-        FD -> handleStepOnFood
-        _otherwise -> pure $ s {mSnake = newSnake}
+          newSnakeCoord = getSnakeHeadCoord newSnake
+          nextState = s {mSnake = newSnake}
+      wst <- case getItem nextState newSnakeCoord of
+        COLLISION -> pure $ nextState {mStatus = GAMEOVER}
+        EFD -> handleStepOnFood
+        _otherwise -> pure nextState
       pure (wst, (stateToWorld wst, mStatus wst, mSpeedFactor wst))
       where
         handleStepOnFood :: IO WState

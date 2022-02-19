@@ -63,6 +63,7 @@ drawUI (SnakeAppState (Just S.World {..}) _conn) =
         Just S.BL -> str "#"
         Just S.Void -> str " "
         Just S.FD -> str "F"
+        Just S.EFD -> str "O"
         Just S.COLLISION -> str "X"
         Nothing -> str " Out of bounds"
       Nothing -> error "Out of bounds"
