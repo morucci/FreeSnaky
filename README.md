@@ -2,15 +2,14 @@
 
 ## Build
 
-You need to have ghc and cabal installed. See instruction for your distribution. Or use
+You need to have ghc and cabal installed. See instructions for your distribution. Or use
 nix to get a shell with ghc and cabal:
 
 ```
 nix-shell -p ghc -p cabal-install
 ```
 
-Then optionally spawn the FreeSnaky nix-shell to get Shell required Hashell dependencies
-to build the project.
+Then optionally spawn the FreeSnaky nix-shell to get a shell with required Haskell dependencies to build the project.
 
 ```
 nix-shell
