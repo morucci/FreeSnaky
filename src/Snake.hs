@@ -27,7 +27,7 @@ import Control.Concurrent.MVar
 import Data.Aeson (FromJSON, ToJSON)
 import Relude hiding (head, newEmptyMVar, newMVar, putMVar, readMVar, tail)
 import System.Random (randomRIO)
-import Prelude (head, tail)
+import Prelude (tail)
 
 -- Internal Game state data
 ---------------------------
@@ -257,9 +257,7 @@ getItem wm coord =
       case filter (\(SnakeBody c) -> c == coord) $ tail $ snake $ mSnake wm of
         [] -> False
         _ -> True
-    isSnakeHead =
-      let (SnakeBody headCoord) = head $ snake $ mSnake wm
-       in coord == headCoord
+    isSnakeHead = coord == getSnakeHeadCoord (mSnake wm)
     isBlock =
       case filter (\(Block c) -> c == coord) $ mBlocks wm of
         [] -> False
