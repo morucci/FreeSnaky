@@ -59,12 +59,12 @@ drawUI (SnakeAppState (Just S.World {..}) _conn) =
     cellsInRow y = [drawCoord (x, y) | x <- [0 .. wWidth -1]]
     drawCoord (x, y) = case wFlattenedMap !!? x of
       Just r -> case r !!? y of
-        Just S.SB -> withAttr snakeAttr $ str " "
+        Just S.SB -> withAttr snakeAttr $ str "o"
         Just S.BL -> withAttr blockAttr $ str " "
         Just S.Void -> str " "
-        Just S.FD -> withAttr foodAttr $ str " "
-        Just S.EFD -> withAttr eatenFoodAttr $ str " "
-        Just S.COLLISION -> withAttr collisionAttr $ str "X"
+        Just S.FD -> withAttr foodAttr $ str "*"
+        Just S.EFD -> withAttr snakeAttr $ str "O"
+        Just S.COLLISION -> withAttr collisionAttr $ str "x"
         Nothing -> str " Out of bounds"
       Nothing -> error "Out of bounds"
 
@@ -87,11 +87,10 @@ handleEvent s@(SnakeAppState _ conn) event = case event of
       liftIO $ WS.sendTextData conn $ encode (S.SnakeDirection dir)
       continue s
 
-foodAttr, blockAttr, snakeAttr, eatenFoodAttr, collisionAttr :: AttrName
+foodAttr, blockAttr, snakeAttr, collisionAttr :: AttrName
 foodAttr = "foodAttr"
 blockAttr = "blockAttr"
 snakeAttr = "snakeAttr"
-eatenFoodAttr = "eatenFoodAttr"
 collisionAttr = "collisionAttr"
 
 -- | The Brick application definition
@@ -109,11 +108,10 @@ brickApp =
     theMap =
       attrMap
         V.defAttr
-        [ (collisionAttr, V.red `on` V.brightRed),
-          (foodAttr, V.yellow `on` V.yellow),
-          (blockAttr, V.white `on` V.white),
-          (snakeAttr, V.green `on` V.green),
-          (eatenFoodAttr, V.brightGreen `on` V.brightGreen)
+        [ (collisionAttr, fg V.brightRed),
+          (foodAttr, fg V.yellow),
+          (blockAttr, bg V.white),
+          (snakeAttr, fg V.green)
         ]
 
 -- | Client App to run once the WS is connected
