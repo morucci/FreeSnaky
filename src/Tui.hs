@@ -22,7 +22,7 @@ import Data.Aeson (encode)
 import qualified Graphics.Vty as V
 import Network.Socket (withSocketsDo)
 import qualified Network.WebSockets as WS
-import Relude
+import Relude hiding (on)
 import qualified Server as S
   ( Direction (..),
     Item (..),
@@ -55,21 +55,18 @@ drawUI (SnakeAppState (Just S.World {..}) _conn) =
     gameView = vBox [headerWidget, snakeWorldWidget]
     headerWidget = str $ "Score: " <> show wScore
     snakeWorldWidget = vBox rows
-    rows = [hBox $ cellsInRow r | r <- [0 .. height -1]]
-    cellsInRow y = [drawCoord (x, y) | x <- [0 .. width -1]]
-    drawCoord (x, y) = case m !!? x of
+    rows = [hBox $ cellsInRow r | r <- [0 .. wHeight -1]]
+    cellsInRow y = [drawCoord (x, y) | x <- [0 .. wWidth -1]]
+    drawCoord (x, y) = case wFlattenedMap !!? x of
       Just r -> case r !!? y of
-        Just S.SB -> str "o"
-        Just S.BL -> str "#"
+        Just S.SB -> withAttr snakeAttr $ str " "
+        Just S.BL -> withAttr blockAttr $ str " "
         Just S.Void -> str " "
-        Just S.FD -> str "F"
-        Just S.EFD -> str "O"
-        Just S.COLLISION -> str "X"
+        Just S.FD -> withAttr foodAttr $ str " "
+        Just S.EFD -> withAttr eatenFoodAttr $ str " "
+        Just S.COLLISION -> withAttr collisionAttr $ str "X"
         Nothing -> str " Out of bounds"
       Nothing -> error "Out of bounds"
-    height = wHeight
-    width = wWidth
-    m = wFlattenedMap
 
 -- | Handle application events
 handleEvent :: SnakeAppState -> BrickEvent Name Tick -> EventM Name (Next SnakeAppState)
@@ -90,6 +87,13 @@ handleEvent s@(SnakeAppState _ conn) event = case event of
       liftIO $ WS.sendTextData conn $ encode (S.SnakeDirection dir)
       continue s
 
+foodAttr, blockAttr, snakeAttr, eatenFoodAttr, collisionAttr :: AttrName
+foodAttr = "foodAttr"
+blockAttr = "blockAttr"
+snakeAttr = "snakeAttr"
+eatenFoodAttr = "eatenFoodAttr"
+collisionAttr = "collisionAttr"
+
 -- | The Brick application definition
 brickApp :: App SnakeAppState Tick Name
 brickApp =
@@ -102,7 +106,15 @@ brickApp =
     }
   where
     theMap :: AttrMap
-    theMap = attrMap V.defAttr []
+    theMap =
+      attrMap
+        V.defAttr
+        [ (collisionAttr, V.red `on` V.brightRed),
+          (foodAttr, V.yellow `on` V.yellow),
+          (blockAttr, V.white `on` V.white),
+          (snakeAttr, V.green `on` V.green),
+          (eatenFoodAttr, V.brightGreen `on` V.brightGreen)
+        ]
 
 -- | Client App to run once the WS is connected
 runClientApp :: Text -> WS.ClientApp ()
