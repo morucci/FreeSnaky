@@ -79,7 +79,9 @@ data WState = WState
     -- | The current score
     mScore :: Int,
     -- | Generate food
-    mGenFood :: Bool
+    mGenFood :: Bool,
+    -- | Direction has been set
+    mDirSet :: Bool
   }
   deriving (Show)
 
@@ -294,6 +296,7 @@ mkMap = do
       mSpeedFactor = 1.0
       mScore = 0
       mGenFood = True
+      mDirSet = False
   pure $ WState {..}
   where
     mkBounds :: [Block]
@@ -346,7 +349,10 @@ runStep (AppMem mem) = do
             newFood <- mkFood (mWidth s) (mHeight s)
             pure $ wst' {mFood = newFood, mGenFood = False}
           else pure wst'
-      pure (wst, (stateToWorld wst, mStatus wst, mSpeedFactor wst))
+      pure
+        ( wst {mDirSet = False},
+          (stateToWorld wst, mStatus wst, mSpeedFactor wst)
+        )
       where
         handleStepOnFood :: IO WState
         handleStepOnFood = do
@@ -369,4 +375,11 @@ setDirection (AppMem mem) dir = do
   where
     doM :: WState -> IO WState
     doM s =
-      pure $ s {mSnake = setSnakeDirection dir $ mSnake s}
+      pure $
+        if mDirSet s
+          then s
+          else
+            s
+              { mSnake = setSnakeDirection dir $ mSnake s,
+                mDirSet = True
+              }
