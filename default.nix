@@ -4,8 +4,8 @@ let
 
   inherit (nixpkgs) pkgs;
 
-  f = { mkDerivation, aeson, async, base, brick, lib, network
-      , optparse-generic, random, say, text, vty, websockets, witch
+  f = { mkDerivation, aeson, async, base, brick, fast-logger, lib
+      , network, optparse-generic, random, text, vty, websockets, witch
       }:
       mkDerivation {
         pname = "FreeSnaky";
@@ -14,9 +14,12 @@ let
         isLibrary = true;
         isExecutable = true;
         libraryHaskellDepends = [
-          aeson async base brick network random say text vty websockets witch
+          aeson async base brick fast-logger network random text vty
+          websockets witch
         ];
-        executableHaskellDepends = [ async base optparse-generic ];
+        executableHaskellDepends = [
+          async base fast-logger optparse-generic
+        ];
         homepage = "https://github.com/morucci/FreeSnaky#README.md";
         description = "Free Snaky";
         license = "unknown";

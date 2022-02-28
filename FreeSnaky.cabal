@@ -26,6 +26,7 @@ common common-options
                       -threaded
 
     build-depends:    base < 5
+                    , fast-logger
 
 library
     import:           common-options
@@ -38,7 +39,6 @@ library
                     , vty
                     , random
                     , network
-                    , say
                     , text
                     , websockets
                     , witch

@@ -28,11 +28,11 @@ import qualified Network.WebSockets as WS
 import qualified Server as S
   ( Direction (..),
     Item (..),
+    NetworkAddr (..),
     ProtoMessage (..),
     World (..),
     getProtoMessage,
   )
-import Witch
 import Prelude
 
 -- Various types for the Brick Engine
@@ -149,11 +149,11 @@ runClientApp clientId conn = do
 -----------------
 
 -- | Run a TUI Client
-runClient :: T.Text -> Int -> T.Text -> IO ()
-runClient addr port ident =
+runClient :: S.NetworkAddr -> T.Text -> IO ()
+runClient S.NetworkAddr {..} ident =
   withSocketsDo $
-    WS.runClient (from addr) port "/" $ runClientApp ident
+    WS.runClient nAddr nPort "/" $ runClientApp ident
 
 -- | Run a TUI Client by connection on the local server
 runClientLocal :: T.Text -> IO ()
-runClientLocal = runClient "127.0.0.1" 9160
+runClientLocal = runClient $ S.NetworkAddr "127.0.0.1" 9160

@@ -9,17 +9,21 @@ import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (withAsync)
 import Options.Generic
 import Server
+import System.Log.FastLogger
+  ( LogType' (LogStdout),
+    defaultBufSize,
+  )
 import Tui
 import Prelude
 
 data Args w
   = Client
-      { address :: w ::: Text <?> "Address to connect",
+      { address :: w ::: String <?> "Address to connect",
         port :: w ::: Int <?> "Port to connect" <!> "9160",
         snakeName :: w ::: Text <?> "Snake name" <!> "FreeSnaky"
       }
   | Server
-      { bindAddress :: w ::: Text <?> "Address to bind to",
+      { bindAddress :: w ::: String <?> "Address to bind to",
         bindPort :: w ::: Int <?> "Port to bind to" <!> "9160"
       }
   | Local
@@ -34,10 +38,10 @@ main :: IO ()
 main = do
   args <- unwrapRecord "Free Snaky"
   case (args :: Args Unwrapped) of
-    Client addr port name -> runClient addr port name
-    Server addr port -> runServer addr port Nothing
+    Client addr port name -> runClient (NetworkAddr addr port) name
+    Server addr port -> runServer (NetworkAddr addr port) (LogStdout defaultBufSize)
     Local name ->
-      withAsync (runServerLocal (Just . const $ pure ())) $
+      withAsync runServerLocal $
         \_ -> do
           threadDelay 1000000
           runClientLocal name

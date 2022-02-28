@@ -16,6 +16,9 @@ module Server
     Item (..),
     World (..),
 
+    -- * Facilities data types
+    NetworkAddr (..),
+
     -- * Read message on the WS
     getProtoMessage,
 
@@ -36,14 +39,24 @@ import Control.Concurrent.Async (concurrently_)
 import Control.Exception (throwIO, try)
 import Control.Monad (when)
 import Data.Aeson (FromJSON, ToJSON, decode, encode)
-import Data.Maybe (fromMaybe)
 import qualified Data.Text as T
 import GHC.Generics (Generic)
 import qualified Network.WebSockets as WS
-import Say (say)
 import Snake
+import System.Log.FastLogger
+  ( LogStr,
+    LogType' (LogNone),
+    TimedFastLogger,
+    ToLogStr (toLogStr),
+    newTimeCache,
+    newTimedFastLogger,
+    simpleTimeFormat,
+  )
 import Witch
 import Prelude
+
+logMsg :: TimedFastLogger -> T.Text -> IO ()
+logMsg logger msg = logger (\time -> toLogStr (show time) <> " " <> toLogStr msg <> "\n")
 
 -- Protocol used on the WebSocket
 ---------------------------------
@@ -101,26 +114,26 @@ removeClient :: ClientID -> ServerState -> ServerState
 removeClient client = filter (/= client)
 
 -- | The connection handler
-application :: (T.Text -> IO ()) -> MVar ServerState -> WS.ServerApp
-application logText stM pending = do
+application :: TimedFastLogger -> MVar ServerState -> WS.ServerApp
+application logger stM pending = do
   conn <- WS.acceptRequest pending
   WS.withPingThread conn 30 (pure ()) $ do
     msg <- getProtoMessage conn
     case msg of
       Hello ident -> handleClient ident conn
-      _ -> logText "Protocol violation. Expected Hello."
+      _ -> logMsg logger "Protocol violation. Expected Hello."
   where
     handleClient :: ClientID -> WS.Connection -> IO ()
     handleClient client conn = do
       clients <- readMVar stM
-      logText $ "Incomming client: " <> client
+      logMsg logger ("Incoming client: " <> client)
       if clientExists client clients
         then do
-          logText "Client exists. Sending Bye."
+          logMsg logger "Client exists. Sending Bye."
           WS.sendClose conn $ encode Bye
         else do
           modifyMVar_ stM $ \st -> do
-            logText "Client new. Sending Welcome."
+            logMsg logger "Client new. Sending Welcome."
             WS.sendTextData conn $ encode $ Hello client
             pure $ addClient client st
           handleGame client conn
@@ -141,36 +154,43 @@ application logText stM pending = do
           case resp of
             SnakeDirection dir -> do
               setDirection appMem dir
-              logText $ "Got SnakeDirection from " <> client
+              logMsg logger $ "Got SnakeDirection from " <> client
             Bye -> do
               modifyMVar_ stM $ \st -> do
-                logText $ "Got Bye message from " <> client
+                logMsg logger $ "Got Bye message from " <> client
                 pure $ removeClient client st
               error "End" -- Force both threads to end
-            _ -> logText $ "Unexpected command from " <> client
+            _ -> logMsg logger $ "Unexpected command from " <> client
           handleInputCommands appMem
         handleGameState :: AppMem -> IO ()
         handleGameState appMem = do
           (world, status, speedFactor) <- runStep appMem
           WS.sendTextData conn $ encode $ Tick world
-          logText $ "Sending tick to client " <> client
+          logMsg logger $ "Sending tick to client " <> client
           when (status == GAMEOVER) $ do resetAppMem appMem
           let minDelay = 200000
               delay = max minDelay $ truncate $ initialTickDelay / speedFactor
-          logText . from $ "Waiting " <> show delay <> " for client " <> from client
+          logMsg logger $ from ("Waiting " <> show delay <> " for client " <> from client)
           threadDelay delay
           handleGameState appMem
 
 -- Functions to start start the server
 --------------------------------------
 
+data NetworkAddr = NetworkAddr
+  { nAddr :: String,
+    nPort :: Int
+  }
+  deriving (Show)
+
 -- | Run a local server on port 9160
-runServerLocal :: Maybe (T.Text -> IO ()) -> IO ()
-runServerLocal = runServer "127.0.0.1" 9160
+runServerLocal :: IO ()
+runServerLocal = runServer (NetworkAddr "127.0.0.1" 9160) LogNone
 
 -- | Run a server
-runServer :: T.Text -> Int -> Maybe (T.Text -> IO ()) -> IO ()
-runServer addr port loggerM = do
+runServer :: NetworkAddr -> LogType' LogStr -> IO ()
+runServer NetworkAddr {..} logType = do
   s <- newMVar newServerState
-  let logger = fromMaybe say loggerM
-  WS.runServer (from addr) port $ application logger s
+  timeCache <- newTimeCache simpleTimeFormat
+  (logger, _) <- newTimedFastLogger timeCache logType
+  WS.runServer nAddr nPort $ application logger s
