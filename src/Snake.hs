@@ -25,9 +25,9 @@ where
 
 import Control.Concurrent.MVar
 import Data.Aeson (FromJSON, ToJSON)
-import Relude hiding (head, newEmptyMVar, newMVar, putMVar, readMVar, tail)
+import GHC.Generics (Generic)
 import System.Random (randomRIO)
-import Prelude (tail)
+import Prelude
 
 -- Internal Game state data
 ---------------------------

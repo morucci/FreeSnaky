@@ -18,11 +18,13 @@ import Brick.BChan
 import qualified Brick.Widgets.Border as B
 import qualified Brick.Widgets.Border.Style as BS
 import Control.Concurrent.Async (withAsync)
+import Control.Monad (void)
+import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (encode)
+import qualified Data.Text as T
 import qualified Graphics.Vty as V
 import Network.Socket (withSocketsDo)
 import qualified Network.WebSockets as WS
-import Relude hiding (on)
 import qualified Server as S
   ( Direction (..),
     Item (..),
@@ -30,6 +32,8 @@ import qualified Server as S
     World (..),
     getProtoMessage,
   )
+import Witch
+import Prelude
 
 -- Various types for the Brick Engine
 -------------------------------------
@@ -57,16 +61,13 @@ drawUI (SnakeAppState (Just S.World {..}) _conn) =
     snakeWorldWidget = vBox rows
     rows = [hBox $ cellsInRow r | r <- [0 .. wHeight -1]]
     cellsInRow y = [drawCoord (x, y) | x <- [0 .. wWidth -1]]
-    drawCoord (x, y) = case wFlattenedMap !!? x of
-      Just r -> case r !!? y of
-        Just S.SB -> withAttr snakeAttr $ str "o"
-        Just S.BL -> withAttr blockAttr $ str " "
-        Just S.Void -> str " "
-        Just S.FD -> withAttr foodAttr $ str "*"
-        Just S.EFD -> withAttr snakeAttr $ str "O"
-        Just S.COLLISION -> withAttr collisionAttr $ str "x"
-        Nothing -> str " Out of bounds"
-      Nothing -> error "Out of bounds"
+    drawCoord (x, y) = case (wFlattenedMap !! x) !! y of
+      S.SB -> withAttr snakeAttr $ str "o"
+      S.BL -> withAttr blockAttr $ str " "
+      S.Void -> str " "
+      S.FD -> withAttr foodAttr $ str "*"
+      S.EFD -> withAttr snakeAttr $ str "O"
+      S.COLLISION -> withAttr collisionAttr $ str "x"
 
 -- | Handle application events
 handleEvent :: SnakeAppState -> BrickEvent Name Tick -> EventM Name (Next SnakeAppState)
@@ -115,7 +116,7 @@ brickApp =
         ]
 
 -- | Client App to run once the WS is connected
-runClientApp :: Text -> WS.ClientApp ()
+runClientApp :: T.Text -> WS.ClientApp ()
 runClientApp clientId conn = do
   WS.sendTextData conn $ encode (S.Hello clientId)
   resp <- S.getProtoMessage conn
@@ -127,8 +128,8 @@ runClientApp clientId conn = do
       initialVty <- buildVty
       withAsync (readServerMessages chan) $ \_ -> do
         void $ customMain initialVty buildVty (Just chan) brickApp initialState
-    S.Bye -> print ("Client already connected" :: Text)
-    _ -> print ("Unhandled server message" :: Text)
+    S.Bye -> putStrLn "Client already connected"
+    _ -> putStrLn "Unhandled server message"
   where
     readServerMessages :: BChan Tick -> IO ()
     readServerMessages chan = do
@@ -139,20 +140,20 @@ runClientApp clientId conn = do
           readServerMessages chan
         S.Bye -> do
           -- TODO: update SnakeAppState to warn UI about server disconnection
-          print ("Server closed connection" :: Text)
+          putStrLn "Server closed connection"
         _ -> do
           -- TODO: update SnakeAppState to warn UI about server disconnection
-          print ("Unhandled server message" :: Text)
+          putStrLn "Unhandled server message"
 
 -- Main functions
 -----------------
 
 -- | Run a TUI Client
-runClient :: Text -> Int -> Text -> IO ()
+runClient :: T.Text -> Int -> T.Text -> IO ()
 runClient addr port ident =
   withSocketsDo $
-    WS.runClient (toString addr) port "/" $ runClientApp ident
+    WS.runClient (from addr) port "/" $ runClientApp ident
 
 -- | Run a TUI Client by connection on the local server
-runClientLocal :: Text -> IO ()
+runClientLocal :: T.Text -> IO ()
 runClientLocal = runClient "127.0.0.1" 9160

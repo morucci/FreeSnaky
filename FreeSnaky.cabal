@@ -25,8 +25,7 @@ common common-options
     ghc-options:      -Wall
                       -threaded
 
-    build-depends:    base ^>=4.14.3.0
-                    , relude ^>=0.7.0.0
+    build-depends:    base < 5
 
 library
     import:           common-options
@@ -40,7 +39,9 @@ library
                     , random
                     , network
                     , say
+                    , text
                     , websockets
+                    , witch
     hs-source-dirs:   src
 
 executable FreeSnaky

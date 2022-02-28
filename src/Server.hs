@@ -1,3 +1,5 @@
+{-# LANGUAGE TypeApplications #-}
+
 -- |
 -- Module      : Server
 -- Description : WebSocket interface to the Snake game
@@ -23,19 +25,25 @@ module Server
   )
 where
 
-import Control.Concurrent as C
-  ( modifyMVar_,
+import Control.Concurrent
+  ( MVar,
+    modifyMVar_,
     newMVar,
     readMVar,
     threadDelay,
   )
 import Control.Concurrent.Async (concurrently_)
 import Control.Exception (throwIO, try)
+import Control.Monad (when)
 import Data.Aeson (FromJSON, ToJSON, decode, encode)
+import Data.Maybe (fromMaybe)
+import qualified Data.Text as T
+import GHC.Generics (Generic)
 import qualified Network.WebSockets as WS
-import Relude
 import Say (say)
 import Snake
+import Witch
+import Prelude
 
 -- Protocol used on the WebSocket
 ---------------------------------
@@ -43,7 +51,7 @@ import Snake
 -- | Message of the Protocol
 data ProtoMessage
   = -- | Handcheck message
-    Hello Text
+    Hello T.Text
   | -- | Set snake direction message
     SnakeDirection Direction
   | -- | Tick message (propagate the current game state representation)
@@ -72,7 +80,7 @@ getProtoMessage conn = do
 -- Various types and functions to handle the Server state
 ---------------------------------------------------------
 
-type ClientID = Text
+type ClientID = T.Text
 
 type ServerState = [ClientID]
 
@@ -93,7 +101,7 @@ removeClient :: ClientID -> ServerState -> ServerState
 removeClient client = filter (/= client)
 
 -- | The connection handler
-application :: (Text -> IO ()) -> MVar ServerState -> WS.ServerApp
+application :: (T.Text -> IO ()) -> MVar ServerState -> WS.ServerApp
 application logText stM pending = do
   conn <- WS.acceptRequest pending
   WS.withPingThread conn 30 (pure ()) $ do
@@ -104,7 +112,7 @@ application logText stM pending = do
   where
     handleClient :: ClientID -> WS.Connection -> IO ()
     handleClient client conn = do
-      clients <- C.readMVar stM
+      clients <- readMVar stM
       logText $ "Incomming client: " <> client
       if clientExists client clients
         then do
@@ -149,7 +157,7 @@ application logText stM pending = do
           when (status == GAMEOVER) $ do resetAppMem appMem
           let minDelay = 200000
               delay = max minDelay $ truncate $ initialTickDelay / speedFactor
-          logText $ "Waiting " <> show delay <> " for client " <> client
+          logText . from $ "Waiting " <> show delay <> " for client " <> from client
           threadDelay delay
           handleGameState appMem
 
@@ -157,12 +165,12 @@ application logText stM pending = do
 --------------------------------------
 
 -- | Run a local server on port 9160
-runServerLocal :: Maybe (Text -> IO ()) -> IO ()
+runServerLocal :: Maybe (T.Text -> IO ()) -> IO ()
 runServerLocal = runServer "127.0.0.1" 9160
 
 -- | Run a server
-runServer :: Text -> Int -> Maybe (Text -> IO ()) -> IO ()
+runServer :: T.Text -> Int -> Maybe (T.Text -> IO ()) -> IO ()
 runServer addr port loggerM = do
-  s <- C.newMVar newServerState
+  s <- newMVar newServerState
   let logger = fromMaybe say loggerM
-  WS.runServer (toString addr) port $ application logger s
+  WS.runServer (from addr) port $ application logger s

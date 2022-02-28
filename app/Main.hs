@@ -8,9 +8,9 @@ module Main where
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (withAsync)
 import Options.Generic
-import Relude
 import Server
 import Tui
+import Prelude
 
 data Args w
   = Client
