@@ -12,6 +12,8 @@ module LeaderBoard
     LeaderBoard (..),
     Board (..),
     BoardEntry (..),
+    Ident,
+    Score,
 
     -- * Functions to manage the LeaderBoard
     loadLeaderBoard,
@@ -118,16 +120,13 @@ loadLeaderBoard = do
 readLeaderBoard :: LeaderBoard -> IO Board
 readLeaderBoard (LeaderBoard mvar) = readMVar mvar
 
--- | Write the LeaderBoard by adding or not a new Score
-writeLeaderBoard :: LeaderBoard -> Maybe (Ident, Score) -> IO (Either SomeException ())
-writeLeaderBoard (LeaderBoard mvar) entryM = modifyMVar mvar add
+-- | Add entry in board and write the LeaderBoard on disk
+writeLeaderBoard :: LeaderBoard -> (Ident, Score) -> IO (Either SomeException ())
+writeLeaderBoard (LeaderBoard mvar) (ident, score) = modifyMVar mvar add
   where
     add board = do
-      dumpStatus <- case entryM of
-        Nothing -> dumpBoard board
-        Just (ident, score) -> do
-          now <- getCurrentTime
-          dumpBoard $ addScore ident score now board
+      now <- getCurrentTime
+      dumpStatus <- dumpBoard $ addScore ident score now board
       pure $ case dumpStatus of
         Left exc -> (board, Left exc)
         Right boardUpdated -> (boardUpdated, Right ())
