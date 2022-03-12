@@ -33,7 +33,7 @@ import Control.Exception
 import Data.Aeson
   ( FromJSON,
     ToJSON,
-    decodeFileStrict,
+    eitherDecodeFileStrict,
     encodeFile,
   )
 import qualified Data.Text as T
@@ -42,6 +42,7 @@ import GHC.Generics (Generic)
 import System.Directory
   ( XdgDirectory (XdgData),
     createDirectoryIfMissing,
+    doesFileExist,
     getXdgDirectory,
   )
 import Prelude
@@ -72,6 +73,9 @@ newtype Board = Board [BoardEntry] deriving (Show, Generic)
 -- | The LeaderBoard that is a MVar of Board
 newtype LeaderBoard = LeaderBoard (MVar Board)
 
+newBoard :: Board
+newBoard = Board []
+
 dumpPath :: IO FilePath
 dumpPath = do
   dataDir <- getXdgDirectory XdgData "freesnaky"
@@ -86,22 +90,13 @@ dumpBoard board = do
     Left exc -> Left exc
     Right _ -> Right board
 
-loadBoard :: IO Board
+loadBoard :: IO (Either String Board)
 loadBoard = do
   path <- dumpPath
-  boardM <- load path
-  pure $ case boardM of
-    Nothing -> Board []
-    Just board -> board
-  where
-    load :: FilePath -> IO (Maybe Board)
-    load path = do
-      boardME <- load' path
-      pure $ case boardME of
-        Left _ -> Just $ Board []
-        Right boardM -> boardM
-    load' :: FilePath -> IO (Either SomeException (Maybe Board))
-    load' = try . decodeFileStrict
+  fileExists <- doesFileExist path
+  if not fileExists
+    then pure $ Right newBoard
+    else eitherDecodeFileStrict path
 
 addScore :: Ident -> Score -> UTCTime -> Board -> Board
 addScore ident score now (Board entries) = Board $ entries <> [BoardEntry ident score now]
@@ -110,10 +105,14 @@ addScore ident score now (Board entries) = Board $ entries <> [BoardEntry ident 
 -----------------
 
 -- | Load the board from the disk and return a LeaderBoard type
-loadLeaderBoard :: IO LeaderBoard
+loadLeaderBoard :: IO (Either String LeaderBoard)
 loadLeaderBoard = do
-  mvar <- loadBoard >>= newMVar
-  pure $ LeaderBoard mvar
+  boardE <- loadBoard
+  case boardE of
+    Left err -> pure $ Left err
+    Right board -> do
+      mvar <- newMVar board
+      pure . Right $ LeaderBoard mvar
 
 -- | Read the LeaderBoard (extract of the MVar) to return the Board
 readLeaderBoard :: LeaderBoard -> IO Board
@@ -131,4 +130,4 @@ writeLeaderBoard (LeaderBoard mvar) entryM = modifyMVar mvar add
           dumpBoard $ addScore ident score now board
       pure $ case dumpStatus of
         Left exc -> (board, Left exc)
-        Right newBoard -> (newBoard, Right ())
+        Right boardUpdated -> (boardUpdated, Right ())
