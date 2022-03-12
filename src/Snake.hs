@@ -264,9 +264,7 @@ getItem wm coord =
       case filter (\(Block c) -> c == coord) $ mBlocks wm of
         [] -> False
         _ -> True
-    isFood =
-      let (Food c) = mFood wm
-       in if c == coord then True else False
+    isFood = let (Food c) = mFood wm in c == coord
 
 -- Non pure IO functions
 ------------------------
