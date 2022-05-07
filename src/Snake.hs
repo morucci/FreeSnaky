@@ -321,16 +321,11 @@ initAppMem = do
 
 -- | Reset the game
 resetAppMem :: AppMem -> IO ()
-resetAppMem (AppMem mem) = do
-  modifyMVar_ mem doM
-  where
-    doM :: WState -> IO WState
-    doM _ = mkMap
+resetAppMem (AppMem mem) = modifyMVar_ mem $ const mkMap
 
 -- | Perform a Game tick
 runStep :: AppMem -> IO (World, WStatus, Float)
-runStep (AppMem mem) = do
-  modifyMVar mem doM
+runStep (AppMem mem) = modifyMVar mem doM
   where
     doM :: WState -> IO (WState, (World, WStatus, Float))
     doM s = do
@@ -368,8 +363,7 @@ runStep (AppMem mem) = do
 
 -- | Set Snake direction
 setDirection :: AppMem -> Direction -> IO ()
-setDirection (AppMem mem) dir = do
-  modifyMVar_ mem doM
+setDirection (AppMem mem) dir = modifyMVar_ mem doM
   where
     doM :: WState -> IO WState
     doM s =
