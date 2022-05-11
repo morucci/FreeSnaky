@@ -190,8 +190,8 @@ application logger st pending = do
           threadDelay delay
           handleGameState appMem
 
--- Functions to start start the server
---------------------------------------
+-- Functions to start the server
+--------------------------------
 
 data NetworkAddr = NetworkAddr
   { nAddr :: String,

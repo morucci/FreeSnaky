@@ -2,6 +2,12 @@
 
 ![FreeSnaky](doc/screenshot.png)
 
+## Run with nix flakes
+
+```
+nix run github:morucci/FreeSnaky -- local
+```
+
 ## Build
 
 You need to have nix installed. Then run:
@@ -15,20 +21,20 @@ Binary is available at: result/bin/FreeSnaky
 ## Start a local party
 
 ```
-FreeSnaky -- local
+FreeSnaky local
 ```
 
 ## Client / Server mode
 ### Start the Server
 
 ```
-FreeSnaky -- server --bindAddress 127.0.0.1
+FreeSnaky server --bindAddress 127.0.0.1
 ```
 
 ### Start the Terminal Client
 
 ```
-FreeSnaky -- client --address 127.0.0.1
+FreeSnaky client --address 127.0.0.1
 ```
 
 ## Develop
