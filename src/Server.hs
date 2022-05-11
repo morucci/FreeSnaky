@@ -1,5 +1,3 @@
-{-# LANGUAGE TypeApplications #-}
-
 -- |
 -- Module      : Server
 -- Description : WebSocket interface to the Snake game
@@ -41,6 +39,7 @@ import Control.Monad (when)
 import Data.Aeson (FromJSON, ToJSON, decode, encode)
 import qualified Data.Text as T
 import GHC.Generics (Generic)
+import LeaderBoard (LeaderBoard, loadLeaderBoard)
 import qualified Network.WebSockets as WS
 import Snake
 import System.Log.FastLogger
@@ -95,27 +94,45 @@ getProtoMessage conn = do
 
 type ClientID = T.Text
 
-type ServerState = [ClientID]
+type Clients = [ClientID]
+
+-- | The server state
+data ServerState = ServerState
+  { clients :: MVar Clients,
+    leaderBoard :: LeaderBoard
+  }
 
 -- | Create a new server state
-newServerState :: ServerState
-newServerState = []
+newServerState :: IO ServerState
+newServerState = do
+  leaderBoardE <- loadLeaderBoard
+  clients <- newMVar []
+  let leaderBoard = case leaderBoardE of
+        Right lb -> lb
+        Left err -> error $ "Unable to load the leader board: " <> err
+  pure $ ServerState {..}
 
 -- | Check client exists
-clientExists :: ClientID -> ServerState -> Bool
-clientExists = elem
+clientExists :: ClientID -> ServerState -> IO Bool
+clientExists client st = do
+  cls <- readMVar $ clients st
+  pure $ client `elem` cls
 
 -- | Add a new client to the Server state
-addClient :: ClientID -> ServerState -> ServerState
-addClient client clients = client : clients
+addClient :: ClientID -> ServerState -> IO ()
+addClient client st = do
+  modifyMVar_ (clients st) $ \cls -> do
+    pure $ client : cls
 
 -- | Remove a client from the Server state
-removeClient :: ClientID -> ServerState -> ServerState
-removeClient client = filter (/= client)
+removeClient :: ClientID -> ServerState -> IO ()
+removeClient client st = do
+  modifyMVar_ (clients st) $ \cls -> do
+    pure $ filter (/= client) cls
 
 -- | The connection handler
-application :: TimedFastLogger -> MVar ServerState -> WS.ServerApp
-application logger stM pending = do
+application :: TimedFastLogger -> ServerState -> WS.ServerApp
+application logger st pending = do
   conn <- WS.acceptRequest pending
   WS.withPingThread conn 30 (pure ()) $ do
     msg <- getProtoMessage conn
@@ -125,17 +142,17 @@ application logger stM pending = do
   where
     handleClient :: ClientID -> WS.Connection -> IO ()
     handleClient client conn = do
-      clients <- readMVar stM
+      -- serverS <- readMVar stM
       logMsg logger ("Incoming client: " <> client)
-      if clientExists client clients
+      cExists <- clientExists client st
+      if cExists
         then do
           logMsg logger "Client exists. Sending Bye."
           WS.sendClose conn $ encode Bye
         else do
-          modifyMVar_ stM $ \st -> do
-            logMsg logger "Client new. Sending Welcome."
-            WS.sendTextData conn $ encode $ Hello client
-            pure $ addClient client st
+          logMsg logger "Client new. Sending Welcome."
+          WS.sendTextData conn $ encode $ Hello client
+          addClient client st
           handleGame client conn
 
     handleGame :: ClientID -> WS.Connection -> IO ()
@@ -156,9 +173,8 @@ application logger stM pending = do
               setDirection appMem dir
               logMsg logger $ "Got SnakeDirection from " <> client
             Bye -> do
-              modifyMVar_ stM $ \st -> do
-                logMsg logger $ "Got Bye message from " <> client
-                pure $ removeClient client st
+              logMsg logger $ "Got Bye message from " <> client
+              removeClient client st
               error "End" -- Force both threads to end
             _ -> logMsg logger $ "Unexpected command from " <> client
           handleInputCommands appMem
@@ -190,7 +206,7 @@ runServerLocal = runServer (NetworkAddr "127.0.0.1" 9160) LogNone
 -- | Run a server
 runServer :: NetworkAddr -> LogType' LogStr -> IO ()
 runServer NetworkAddr {..} logType = do
-  s <- newMVar newServerState
+  serverState <- newServerState
   timeCache <- newTimeCache simpleTimeFormat
   (logger, _) <- newTimedFastLogger timeCache logType
-  WS.runServer nAddr nPort $ application logger s
+  WS.runServer nAddr nPort $ application logger serverState
