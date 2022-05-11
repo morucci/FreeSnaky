@@ -1,5 +1,7 @@
 # FreeSnaky
 
+![FreeSnaky](doc/screenshot.png)
+
 ## Build
 
 You need to have nix installed. Then run:
