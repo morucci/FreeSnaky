@@ -23,7 +23,10 @@ import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (encode)
 import qualified Data.Text as T
 import qualified Graphics.Vty as V
-import LeaderBoard as L (Board)
+import LeaderBoard as L
+  ( Board (Board),
+    BoardEntry (BoardEntry),
+  )
 import Network.Socket (withSocketsDo)
 import qualified Network.WebSockets as WS
 import qualified Server as S
@@ -34,6 +37,7 @@ import qualified Server as S
     World (..),
     getProtoMessage,
   )
+import Witch
 import Prelude
 
 -- Various types for the Brick Engine
@@ -56,23 +60,32 @@ data SnakeAppState = SnakeAppState
 -- | Draw the UI according to the 'SnakeAppState'
 drawUI :: SnakeAppState -> [Widget Name]
 drawUI (SnakeAppState Nothing _ _) = [vBox [str "Waiting for server map"]]
-drawUI (SnakeAppState (Just S.World {..}) _board _) =
+drawUI (SnakeAppState (Just S.World {..}) boardM _) =
   [ withBorderStyle BS.unicodeBold $
       B.borderWithLabel (str "Free Snaky") gameView
   ]
   where
-    gameView = vBox [headerWidget, snakeWorldWidget]
-    headerWidget = str $ "Score: " <> show wScore
+    gameView =
+      hBox
+        [ vBox [str $ "Score: " <> show wScore, snakeWorldWidget],
+          vBox [str " "],
+          vBox [str "Leader board", leaderBoard]
+        ]
     snakeWorldWidget = vBox rows
     rows = [hBox $ cellsInRow r | r <- [0 .. wHeight - 1]]
     cellsInRow y = [drawCoord (x, y) | x <- [0 .. wWidth - 1]]
-    drawCoord (x, y) = case (wFlattenedMap !! x) !! y of
+    drawCoord (x, y) = case wFlattenedMap !! x !! y of
       S.SB -> withAttr snakeAttr $ str "o"
       S.BL -> withAttr blockAttr $ str " "
       S.Void -> str " "
       S.FD -> withAttr foodAttr $ str "*"
       S.EFD -> withAttr snakeAttr $ str "O"
       S.COLLISION -> withAttr collisionAttr $ str "x"
+    leaderBoard = case boardM of
+      Just (Board board) -> vBox $ map mkEntry board
+      _ -> str ""
+      where
+        mkEntry (L.BoardEntry name score _date) = str (from name <> "...." <> show score)
 
 -- | Handle application events
 handleEvent :: SnakeAppState -> BrickEvent Name ServerEvent -> EventM Name (Next SnakeAppState)
@@ -132,8 +145,7 @@ runClientApp clientId conn = do
       let initialState = SnakeAppState Nothing Nothing conn
           buildVty = V.mkVty V.defaultConfig
       initialVty <- buildVty
-      withAsync (readServerMessages chan) $ \_ -> do
-        void $ customMain initialVty buildVty (Just chan) brickApp initialState
+      withAsync (readServerMessages chan) $ \_ -> void $ customMain initialVty buildVty (Just chan) brickApp initialState
     S.Bye -> putStrLn "Client already connected"
     _ -> putStrLn "Unhandled server message"
   where
@@ -147,12 +159,8 @@ runClientApp clientId conn = do
         S.LeaderBoard board -> do
           writeBChan chan $ LeaderBoard board
           readServerMessages chan
-        S.Bye -> do
-          -- TODO: update SnakeAppState to warn UI about server disconnection
-          putStrLn "Server closed connection"
-        _ -> do
-          -- TODO: update SnakeAppState to warn UI about server disconnection
-          putStrLn "Unhandled server message"
+        S.Bye -> putStrLn "Server closed connection"
+        _ -> putStrLn "Unhandled server message"
 
 -- Main functions
 -----------------
