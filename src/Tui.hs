@@ -21,6 +21,7 @@ import Control.Concurrent.Async (withAsync)
 import Control.Monad (void)
 import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (encode)
+import Data.List (sort)
 import qualified Data.Text as T
 import qualified Graphics.Vty as V
 import LeaderBoard as L
@@ -82,7 +83,7 @@ drawUI (SnakeAppState (Just S.World {..}) boardM _) =
       S.EFD -> withAttr snakeAttr $ str "O"
       S.COLLISION -> withAttr collisionAttr $ str "x"
     leaderBoard = case boardM of
-      Just (Board board) -> vBox $ map mkEntry board
+      Just (Board board) -> vBox $ map mkEntry (take 20 $ sort board)
       _ -> str ""
       where
         mkEntry (L.BoardEntry name score _date) = str (from name <> "...." <> show score)

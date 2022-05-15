@@ -108,11 +108,12 @@ loadBoard = do
     else eitherDecodeFileStrict path
 
 addScore :: Ident -> Score -> UTCTime -> Board -> Board
-addScore ident score now (Board entries) =
+addScore ident newScore now (Board entries) =
   let newEntries =
         take boardDepth $
           sort $
-            entries <> [BoardEntry ident score now]
+            filter (\be -> score be /= 0) $
+              entries <> [BoardEntry ident newScore now]
    in Board newEntries
 
 -- Main functions
