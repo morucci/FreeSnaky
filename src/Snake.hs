@@ -13,7 +13,7 @@ module Snake
     World (..),
     Item (..),
     WStatus (..),
-    AppMem,
+    AppMem (AppMem),
 
     -- * Functions to change the game state
     initAppMem,
@@ -300,9 +300,9 @@ mkMap = do
     mkBounds :: [Block]
     mkBounds =
       [Block $ Coord 0 y | y <- [0 .. height]]
-        <> [Block $ Coord (width -1) y | y <- [0 .. height]]
+        <> [Block $ Coord (width - 1) y | y <- [0 .. height]]
         <> [Block $ Coord x 0 | x <- [0 .. width]]
-        <> [Block $ Coord x (height -1) | x <- [0 .. width]]
+        <> [Block $ Coord x (height - 1) | x <- [0 .. width]]
     width = 50
     height = 25
 
@@ -324,10 +324,10 @@ resetAppMem :: AppMem -> IO ()
 resetAppMem (AppMem mem) = modifyMVar_ mem $ const mkMap
 
 -- | Perform a Game tick
-runStep :: AppMem -> IO (World, WStatus, Float)
+runStep :: AppMem -> IO (World, WStatus, Float, Int)
 runStep (AppMem mem) = modifyMVar mem doM
   where
-    doM :: WState -> IO (WState, (World, WStatus, Float))
+    doM :: WState -> IO (WState, (World, WStatus, Float, Int))
     doM s = do
       let newSnake = moveSnake $ mSnake s
           newSnakeCoord = getSnakeHeadCoord newSnake
@@ -344,7 +344,7 @@ runStep (AppMem mem) = modifyMVar mem doM
           else pure wst'
       pure
         ( wst {mDirSet = False},
-          (stateToWorld wst, mStatus wst, mSpeedFactor wst)
+          (stateToWorld wst, mStatus wst, mSpeedFactor wst, mScore wst)
         )
       where
         handleStepOnFood :: IO WState

@@ -39,7 +39,7 @@ import Control.Monad (when)
 import Data.Aeson (FromJSON, ToJSON, decode, encode)
 import qualified Data.Text as T
 import GHC.Generics (Generic)
-import LeaderBoard (LeaderBoard, loadLeaderBoard)
+import LeaderBoard (LeaderBoard, loadLeaderBoard, writeLeaderBoard)
 import qualified Network.WebSockets as WS
 import Snake
 import System.Log.FastLogger
@@ -103,14 +103,11 @@ data ServerState = ServerState
   }
 
 -- | Create a new server state
-newServerState :: IO ServerState
+newServerState :: IO (Either String ServerState)
 newServerState = do
   leaderBoardE <- loadLeaderBoard
   clients <- newMVar []
-  let leaderBoard = case leaderBoardE of
-        Right lb -> lb
-        Left err -> error $ "Unable to load the leader board: " <> err
-  pure $ ServerState {..}
+  pure $ ServerState clients <$> leaderBoardE
 
 -- | Check client exists
 clientExists :: ClientID -> ServerState -> IO Bool
@@ -129,6 +126,15 @@ removeClient :: ClientID -> ServerState -> IO ()
 removeClient client st = do
   modifyMVar_ (clients st) $ \cls -> do
     pure $ filter (/= client) cls
+
+addScore :: TimedFastLogger -> LeaderBoard -> ClientID -> Int -> IO ()
+addScore logger board ident score = do
+  logMsg logger "b"
+  wb <- writeLeaderBoard board (ident, score)
+  logMsg logger "a"
+  case wb of
+    Right x -> pure x
+    Left err -> logMsg logger $ from ("Unable to save score: " <> show err)
 
 -- | The connection handler
 application :: TimedFastLogger -> ServerState -> WS.ServerApp
@@ -180,10 +186,12 @@ application logger st pending = do
           handleInputCommands appMem
         handleGameState :: AppMem -> IO ()
         handleGameState appMem = do
-          (world, status, speedFactor) <- runStep appMem
+          (world, status, speedFactor, score) <- runStep appMem
           WS.sendTextData conn $ encode $ Tick world
           logMsg logger $ "Sending tick to client " <> client
-          when (status == GAMEOVER) $ do resetAppMem appMem
+          when (status == GAMEOVER) $ do
+            addScore logger (leaderBoard st) client score
+            resetAppMem appMem
           let minDelay = 200000
               delay = max minDelay $ truncate $ initialTickDelay / speedFactor
           logMsg logger $ from ("Waiting " <> show delay <> " for client " <> from client)
@@ -207,6 +215,9 @@ runServerLocal = runServer (NetworkAddr "127.0.0.1" 9160) LogNone
 runServer :: NetworkAddr -> LogType' LogStr -> IO ()
 runServer NetworkAddr {..} logType = do
   serverState <- newServerState
-  timeCache <- newTimeCache simpleTimeFormat
-  (logger, _) <- newTimedFastLogger timeCache logType
-  WS.runServer nAddr nPort $ application logger serverState
+  case serverState of
+    Left err -> putStrLn $ "$ Unable to initialize FreeSnaky due to: " <> from err
+    Right st -> do
+      timeCache <- newTimeCache simpleTimeFormat
+      (logger, _) <- newTimedFastLogger timeCache logType
+      WS.runServer nAddr nPort $ application logger st
