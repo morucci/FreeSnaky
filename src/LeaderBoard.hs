@@ -38,6 +38,7 @@ import Data.Aeson
     eitherDecodeFileStrict,
     encodeFile,
   )
+import Data.List (sort)
 import qualified Data.Text as T
 import Data.Time
 import GHC.Generics (Generic)
@@ -59,7 +60,10 @@ data BoardEntry = BoardEntry
     score :: Score,
     date :: UTCTime
   }
-  deriving (Show, Generic)
+  deriving (Show, Generic, Eq)
+
+instance Ord BoardEntry where
+  (<=) a b = score a > score b
 
 instance FromJSON BoardEntry
 
@@ -70,10 +74,13 @@ instance FromJSON Board
 instance ToJSON Board
 
 -- | A container that is a list of BoardEntry
-newtype Board = Board [BoardEntry] deriving (Show, Generic)
+newtype Board = Board [BoardEntry] deriving (Show, Generic, Eq, Ord)
 
 -- | The LeaderBoard that is a MVar of Board
 newtype LeaderBoard = LeaderBoard (MVar Board)
+
+boardDepth :: Int
+boardDepth = 100
 
 newBoard :: Board
 newBoard = Board []
@@ -101,7 +108,12 @@ loadBoard = do
     else eitherDecodeFileStrict path
 
 addScore :: Ident -> Score -> UTCTime -> Board -> Board
-addScore ident score now (Board entries) = Board $ entries <> [BoardEntry ident score now]
+addScore ident score now (Board entries) =
+  let newEntries =
+        take boardDepth $
+          sort $
+            entries <> [BoardEntry ident score now]
+   in Board newEntries
 
 -- Main functions
 -----------------
