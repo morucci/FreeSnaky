@@ -20,14 +20,14 @@ data Args w
   = Client
       { address :: w ::: String <?> "Address to connect",
         port :: w ::: Int <?> "Port to connect" <!> "9160",
-        snakeName :: w ::: Text <?> "Snake name" <!> "FreeSnaky"
+        snakeName :: w ::: Text <?> "Snake name"
       }
   | Server
       { bindAddress :: w ::: String <?> "Address to bind to",
         bindPort :: w ::: Int <?> "Port to bind to" <!> "9160"
       }
   | Local
-      {snakeName :: w ::: Text <?> "Snake name" <!> "FreeSnaky"}
+      {snakeName :: w ::: Text <?> "Snake name"}
   deriving (Generic)
 
 instance ParseRecord (Args Wrapped)

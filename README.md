@@ -5,7 +5,7 @@
 ## Run with nix flakes
 
 ```
-nix run github:morucci/FreeSnaky -- local
+nix run github:morucci/FreeSnaky -- local --snakeName "John"
 ```
 
 ## Build
@@ -34,7 +34,7 @@ FreeSnaky server --bindAddress 127.0.0.1
 ### Start the Terminal Client
 
 ```
-FreeSnaky client --address 127.0.0.1
+FreeSnaky client --address 127.0.0.1 --snakeName "John"
 ```
 
 ## Develop
