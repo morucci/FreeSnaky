@@ -39,7 +39,13 @@ import Control.Monad (when)
 import Data.Aeson (FromJSON, ToJSON, decode, encode)
 import qualified Data.Text as T
 import GHC.Generics (Generic)
-import LeaderBoard (LeaderBoard, loadLeaderBoard, writeLeaderBoard)
+import LeaderBoard
+  ( Board,
+    LeaderBoard,
+    loadLeaderBoard,
+    readLeaderBoard,
+    writeLeaderBoard,
+  )
 import qualified Network.WebSockets as WS
 import Snake
 import System.Log.FastLogger
@@ -68,6 +74,8 @@ data ProtoMessage
     SnakeDirection Direction
   | -- | Tick message (propagate the current game state representation)
     Tick World
+  | -- | LeaderBoard message (propagate the current leaderBoard to the Client)
+    LeaderBoard Board
   | -- | Bye message
     Bye
   deriving (Show, Generic)
@@ -146,6 +154,11 @@ application logger st pending = do
       Hello ident -> handleClient ident conn
       _ -> logMsg logger "Protocol violation. Expected Hello."
   where
+    sendLeaderBoard :: WS.Connection -> IO ()
+    sendLeaderBoard conn = do
+      board <- readLeaderBoard $ leaderBoard st
+      WS.sendTextData conn $ encode $ LeaderBoard board
+
     handleClient :: ClientID -> WS.Connection -> IO ()
     handleClient client conn = do
       -- serverS <- readMVar stM
@@ -159,6 +172,7 @@ application logger st pending = do
           logMsg logger "Client new. Sending Welcome."
           WS.sendTextData conn $ encode $ Hello client
           addClient client st
+          sendLeaderBoard conn
           handleGame client conn
 
     handleGame :: ClientID -> WS.Connection -> IO ()
@@ -191,6 +205,7 @@ application logger st pending = do
           logMsg logger $ "Sending tick to client " <> client
           when (status == GAMEOVER) $ do
             addScore logger (leaderBoard st) client score
+            sendLeaderBoard conn
             resetAppMem appMem
           let minDelay = 200000
               delay = max minDelay $ truncate $ initialTickDelay / speedFactor
