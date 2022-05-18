@@ -83,10 +83,16 @@ drawUI (SnakeAppState (Just S.World {..}) boardM _) =
       S.EFD -> withAttr snakeAttr $ str "O"
       S.COLLISION -> withAttr collisionAttr $ str "x"
     leaderBoard = case boardM of
-      Just (Board board) -> vBox $ map mkEntry (take 20 $ sort board)
+      Just (Board board) -> vBox $ map mkEntry (take 25 $ sort board)
       _ -> str ""
       where
-        mkEntry (L.BoardEntry name score _date) = str (from name <> "...." <> show score)
+        mkEntry (L.BoardEntry name score _date) =
+          let maxLen = 25
+              scoreLen = length $ show score
+              nameLen = T.length name
+              dotLen = let rem' = maxLen - scoreLen - nameLen in if rem' <= 0 then 0 else rem'
+              paddingDot = from $ replicate dotLen '.'
+           in str $ from (name <> paddingDot <> from (show score))
 
 -- | Handle application events
 handleEvent :: SnakeAppState -> BrickEvent Name ServerEvent -> EventM Name (Next SnakeAppState)
