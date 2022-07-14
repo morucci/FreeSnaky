@@ -7,7 +7,7 @@ synopsis:           Free Snaky
 description:        Help Snaky to be free
 license-file:       LICENSE
 author:             Fabien Boucher
-maintainer:         fboucher@redhat.com
+maintainer:         fabien.dot.boucher@gmail.com
 copyright:          2022 Fabien Boucher
 category:           Game
 extra-source-files:
