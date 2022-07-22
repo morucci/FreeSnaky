@@ -17,10 +17,10 @@ import Brick
 import Brick.BChan
 import qualified Brick.Widgets.Border as B
 import qualified Brick.Widgets.Border.Style as BS
+import Codec.Serialise (serialise)
 import Control.Concurrent.Async (withAsync)
 import Control.Monad (void)
 import Control.Monad.IO.Class (liftIO)
-import Data.Aeson (encode)
 import Data.List (sort)
 import qualified Data.Text as T
 import qualified Graphics.Vty as V
@@ -98,7 +98,7 @@ drawUI (SnakeAppState (Just S.World {..}) boardM _) =
 handleEvent :: SnakeAppState -> BrickEvent Name ServerEvent -> EventM Name (Next SnakeAppState)
 handleEvent s@(SnakeAppState _ _board conn) event = case event of
   VtyEvent (V.EvKey V.KEsc []) -> do
-    liftIO $ WS.sendClose conn $ encode S.Bye
+    liftIO . WS.sendClose conn $ serialise S.Bye
     void . liftIO $ S.getProtoMessage conn
     halt s
   AppEvent (Tick newWorld) -> continue $ s {appWState = Just newWorld}
@@ -111,7 +111,7 @@ handleEvent s@(SnakeAppState _ _board conn) event = case event of
   where
     handleDirEvent :: S.Direction -> EventM Name (Next SnakeAppState)
     handleDirEvent dir = do
-      liftIO $ WS.sendTextData conn $ encode (S.SnakeDirection dir)
+      liftIO $ WS.sendBinaryData conn $ serialise (S.SnakeDirection dir)
       continue s
 
 foodAttr, blockAttr, snakeAttr, collisionAttr :: AttrName
@@ -144,7 +144,7 @@ brickApp =
 -- | Client App to run once the WS is connected
 runClientApp :: T.Text -> WS.ClientApp ()
 runClientApp clientId conn = do
-  WS.sendTextData conn $ encode (S.Hello clientId)
+  WS.sendBinaryData conn . serialise $ S.Hello clientId
   resp <- S.getProtoMessage conn
   case resp of
     S.Hello _ -> do

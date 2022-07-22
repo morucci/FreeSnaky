@@ -42,6 +42,7 @@ library
                     , vty
                     , random
                     , network
+                    , serialise
                     , text
                     , time
                     , websockets

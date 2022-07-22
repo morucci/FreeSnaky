@@ -23,8 +23,8 @@ module Snake
   )
 where
 
+import Codec.Serialise (Serialise)
 import Control.Concurrent.MVar
-import Data.Aeson (FromJSON, ToJSON)
 import GHC.Generics (Generic)
 import System.Random (randomRIO)
 import Prelude
@@ -107,9 +107,7 @@ data Item
     Void
   deriving (Show, Eq, Generic)
 
-instance ToJSON Item
-
-instance FromJSON Item
+instance Serialise Item
 
 -- | Snake direction
 data Direction
@@ -123,9 +121,7 @@ data Direction
     LEFT
   deriving (Show, Eq, Generic)
 
-instance ToJSON Direction
-
-instance FromJSON Direction
+instance Serialise Direction
 
 -- | Game status
 data WStatus
@@ -135,9 +131,7 @@ data WStatus
     RUNNING
   deriving (Show, Eq, Generic)
 
-instance ToJSON WStatus
-
-instance FromJSON WStatus
+instance Serialise WStatus
 
 -- | Snake External Game state
 data World = World
@@ -154,9 +148,7 @@ data World = World
   }
   deriving (Show, Generic)
 
-instance ToJSON World
-
-instance FromJSON World
+instance Serialise World
 
 -- Pure functions
 -----------------

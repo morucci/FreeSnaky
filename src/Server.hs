@@ -26,6 +26,11 @@ module Server
   )
 where
 
+import Codec.Serialise
+  ( Serialise,
+    deserialiseOrFail,
+    serialise,
+  )
 import Control.Concurrent
   ( MVar,
     modifyMVar_,
@@ -36,7 +41,6 @@ import Control.Concurrent
 import Control.Concurrent.Async (concurrently_)
 import Control.Exception (throwIO, try)
 import Control.Monad (when)
-import Data.Aeson (FromJSON, ToJSON, decode, encode)
 import qualified Data.Text as T
 import GHC.Generics (Generic)
 import LeaderBoard
@@ -80,21 +84,22 @@ data ProtoMessage
     Bye
   deriving (Show, Generic)
 
-instance ToJSON ProtoMessage
-
-instance FromJSON ProtoMessage
+instance Serialise ProtoMessage
 
 -- | Read a 'ProtoMessage' message on the WS
 getProtoMessage :: WS.Connection -> IO ProtoMessage
 getProtoMessage conn = do
   receivedDataE <- try $ WS.receiveData conn
   case receivedDataE of
-    Right jsonData -> case decode jsonData of
-      Just msg -> pure msg
-      Nothing -> error "Protocol violation. Unabled to decode message."
+    Right cborData -> case deserialiseOrFail cborData of
+      Right m -> pure m
+      Left err -> error $ "Protocol violation. Unabled to decode message: " <> show err
     Left (WS.CloseRequest _code _msg) -> pure Bye
+    Left exc@WS.ConnectionClosed -> do
+      putStrLn "Received connection closed"
+      throwIO exc
     Left unHandledException -> do
-      -- logText $ "Received unhandled execption " <> show unHandledException
+      putStrLn $ "Received unhandled exception " <> show unHandledException
       throwIO unHandledException
 
 -- Various types and functions to handle the Server state
@@ -148,6 +153,7 @@ addScore logger board ident score = do
 application :: TimedFastLogger -> ServerState -> WS.ServerApp
 application logger st pending = do
   conn <- WS.acceptRequest pending
+  logMsg logger "Received incoming connection"
   WS.withPingThread conn 30 (pure ()) $ do
     msg <- getProtoMessage conn
     case msg of
@@ -157,20 +163,19 @@ application logger st pending = do
     sendLeaderBoard :: WS.Connection -> IO ()
     sendLeaderBoard conn = do
       board <- readLeaderBoard $ leaderBoard st
-      WS.sendTextData conn $ encode $ LeaderBoard board
+      WS.sendBinaryData conn $ serialise $ LeaderBoard board
 
     handleClient :: ClientID -> WS.Connection -> IO ()
     handleClient client conn = do
-      -- serverS <- readMVar stM
       logMsg logger ("Incoming client: " <> client)
       cExists <- clientExists client st
       if cExists
         then do
           logMsg logger "Client exists. Sending Bye."
-          WS.sendClose conn $ encode Bye
+          WS.sendClose conn $ serialise Bye
         else do
           logMsg logger "Client new. Sending Welcome."
-          WS.sendTextData conn $ encode $ Hello client
+          WS.sendBinaryData conn $ serialise $ Hello client
           addClient client st
           sendLeaderBoard conn
           handleGame client conn
@@ -201,7 +206,7 @@ application logger st pending = do
         handleGameState :: AppMem -> IO ()
         handleGameState appMem = do
           (world, status, speedFactor, score) <- runStep appMem
-          WS.sendTextData conn $ encode $ Tick world
+          WS.sendBinaryData conn $ serialise $ Tick world
           logMsg logger $ "Sending tick to client " <> client
           when (status == GAMEOVER) $ do
             addScore logger (leaderBoard st) client score

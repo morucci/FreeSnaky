@@ -22,6 +22,7 @@ module LeaderBoard
   )
 where
 
+import Codec.Serialise (Serialise)
 import Control.Concurrent
   ( MVar,
     modifyMVar,
@@ -72,6 +73,10 @@ instance ToJSON BoardEntry
 instance FromJSON Board
 
 instance ToJSON Board
+
+instance Serialise BoardEntry
+
+instance Serialise Board
 
 -- | A container that is a list of BoardEntry
 newtype Board = Board [BoardEntry] deriving (Show, Generic, Eq, Ord)
