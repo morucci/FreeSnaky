@@ -40,6 +40,7 @@ import qualified Server as S
     World (..),
     getProtoMessage,
   )
+import Text.Printf (printf)
 import Witch
 import Prelude
 
@@ -70,10 +71,11 @@ drawUI (SnakeAppState (Just S.World {..}) boardM serverPingM _) =
       B.borderWithLabel (str "FreeSnaky") gameView
   ]
   where
+    diffMs v = printf "%.5s ms" (show v)
     infoView =
       hBox $
         [str $ "Score: " <> show wScore, str " "]
-          <> maybe mempty (\v -> [str $ "Ping: " <> show v]) serverPingM
+          <> maybe mempty (\v -> [str $ "Ping: " <> diffMs v]) serverPingM
 
     gameView =
       hBox
