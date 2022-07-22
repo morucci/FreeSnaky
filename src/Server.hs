@@ -42,6 +42,7 @@ import Control.Concurrent.Async (concurrently_)
 import Control.Exception (throwIO, try)
 import Control.Monad (when)
 import qualified Data.Text as T
+import Data.Time (UTCTime)
 import GHC.Generics (Generic)
 import LeaderBoard
   ( Board,
@@ -82,6 +83,10 @@ data ProtoMessage
     LeaderBoard Board
   | -- | Bye message
     Bye
+  | -- | Ping message
+    Ping UTCTime
+  | -- | Pong message
+    Pong UTCTime
   deriving (Show, Generic)
 
 instance Serialise ProtoMessage
@@ -197,6 +202,7 @@ application logger st pending = do
             SnakeDirection dir -> do
               setDirection appMem dir
               logMsg logger $ "Got SnakeDirection from " <> client
+            Ping date -> WS.sendBinaryData conn $ serialise $ Pong date
             Bye -> do
               logMsg logger $ "Got Bye message from " <> client
               removeClient client st

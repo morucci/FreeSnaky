@@ -18,11 +18,13 @@ import Brick.BChan
 import qualified Brick.Widgets.Border as B
 import qualified Brick.Widgets.Border.Style as BS
 import Codec.Serialise (serialise)
+import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (withAsync)
 import Control.Monad (void)
 import Control.Monad.IO.Class (liftIO)
 import Data.List (sort)
 import qualified Data.Text as T
+import Data.Time (NominalDiffTime, diffUTCTime, getCurrentTime)
 import qualified Graphics.Vty as V
 import LeaderBoard as L
   ( Board (Board),
@@ -48,6 +50,7 @@ import Prelude
 data ServerEvent
   = Tick S.World
   | LeaderBoard L.Board
+  | ServerPing NominalDiffTime
 
 data Name = MainView deriving (Eq, Ord, Show)
 
@@ -55,20 +58,26 @@ data Name = MainView deriving (Eq, Ord, Show)
 data SnakeAppState = SnakeAppState
   { appWState :: Maybe S.World,
     appLeaderBoard :: Maybe L.Board,
+    appServerPing :: Maybe NominalDiffTime,
     _appConn :: WS.Connection
   }
 
 -- | Draw the UI according to the 'SnakeAppState'
 drawUI :: SnakeAppState -> [Widget Name]
-drawUI (SnakeAppState Nothing _ _) = [vBox [str "Waiting for server map"]]
-drawUI (SnakeAppState (Just S.World {..}) boardM _) =
+drawUI (SnakeAppState Nothing _ _ _) = [vBox [str "Waiting for server map"]]
+drawUI (SnakeAppState (Just S.World {..}) boardM serverPingM _) =
   [ withBorderStyle BS.unicodeBold $
-      B.borderWithLabel (str "Free Snaky") gameView
+      B.borderWithLabel (str "FreeSnaky") gameView
   ]
   where
+    infoView =
+      hBox $
+        [str $ "Score: " <> show wScore, str " "]
+          <> maybe mempty (\v -> [str $ "Ping: " <> show v]) serverPingM
+
     gameView =
       hBox
-        [ vBox [str $ "Score: " <> show wScore, snakeWorldWidget],
+        [ vBox [infoView, snakeWorldWidget],
           vBox [str " "],
           vBox [str "Leader board", leaderBoard]
         ]
@@ -96,13 +105,14 @@ drawUI (SnakeAppState (Just S.World {..}) boardM _) =
 
 -- | Handle application events
 handleEvent :: SnakeAppState -> BrickEvent Name ServerEvent -> EventM Name (Next SnakeAppState)
-handleEvent s@(SnakeAppState _ _board conn) event = case event of
+handleEvent s@(SnakeAppState _ _board _serverPing conn) event = case event of
   VtyEvent (V.EvKey V.KEsc []) -> do
     liftIO . WS.sendClose conn $ serialise S.Bye
     void . liftIO $ S.getProtoMessage conn
     halt s
   AppEvent (Tick newWorld) -> continue $ s {appWState = Just newWorld}
   AppEvent (LeaderBoard newLBoard) -> continue $ s {appLeaderBoard = Just newLBoard}
+  AppEvent (ServerPing dt) -> continue $ s {appServerPing = Just dt}
   VtyEvent (V.EvKey V.KRight []) -> handleDirEvent S.RIGHT
   VtyEvent (V.EvKey V.KLeft []) -> handleDirEvent S.LEFT
   VtyEvent (V.EvKey V.KUp []) -> handleDirEvent S.UP
@@ -149,13 +159,24 @@ runClientApp clientId conn = do
   case resp of
     S.Hello _ -> do
       chan <- newBChan 10
-      let initialState = SnakeAppState Nothing Nothing conn
-          buildVty = V.mkVty V.defaultConfig
-      initialVty <- buildVty
-      withAsync (readServerMessages chan) $ \_ -> void $ customMain initialVty buildVty (Just chan) brickApp initialState
+      withAsync (readServerMessages chan) $ \_ ->
+        withAsync sendPingMessages $ \_ ->
+          runBrickApp chan
     S.Bye -> putStrLn "Client already connected"
     _ -> putStrLn "Unhandled server message"
   where
+    runBrickApp :: BChan ServerEvent -> IO ()
+    runBrickApp chan = do
+      let initialState = SnakeAppState Nothing Nothing Nothing conn
+          buildVty = V.mkVty V.defaultConfig
+      initialVty <- buildVty
+      void $ customMain initialVty buildVty (Just chan) brickApp initialState
+    sendPingMessages :: IO ()
+    sendPingMessages = do
+      now <- getCurrentTime
+      liftIO $ WS.sendBinaryData conn $ serialise (S.Ping now)
+      threadDelay 5000000
+      sendPingMessages
     readServerMessages :: BChan ServerEvent -> IO ()
     readServerMessages chan = do
       resp <- S.getProtoMessage conn
@@ -165,6 +186,10 @@ runClientApp clientId conn = do
           readServerMessages chan
         S.LeaderBoard board -> do
           writeBChan chan $ LeaderBoard board
+          readServerMessages chan
+        S.Pong sentDate -> do
+          now <- getCurrentTime
+          writeBChan chan . ServerPing $ diffUTCTime now sentDate
           readServerMessages chan
         S.Bye -> putStrLn "Server closed connection"
         _ -> putStrLn "Unhandled server message"
