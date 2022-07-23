@@ -363,29 +363,23 @@ runStep (AppMem mem) = modifyMVar mem doM
 
 -- | Set Snake direction
 setDirection :: AppMem -> Direction -> IO ()
-setDirection (AppMem mem) dir = modifyMVar_ mem doM
-  where
-    doM :: WState -> IO WState
-    doM s =
-      pure $
-        if mDirSet s
-          then s
-          else
-            s
-              { mSnake = setSnakeDirection dir $ mSnake s,
-                mDirSet = True
-              }
+setDirection (AppMem mem) dir = modifyMVar_ mem $ \s -> do
+  pure $
+    if mDirSet s
+      then s
+      else
+        s
+          { mSnake = setSnakeDirection dir $ mSnake s,
+            mDirSet = True
+          }
 
 -- | Set/Unset pause status
 setPause :: AppMem -> IO ()
-setPause (AppMem mem) = modifyMVar_ mem doM
-  where
-    doM :: WState -> IO WState
-    doM s =
-      pure $
-        s
-          { mStatus = case mStatus s of
-              RUNNING -> PAUSE
-              PAUSE -> RUNNING
-              _other -> _other
-          }
+setPause (AppMem mem) = modifyMVar_ mem $ \s -> do
+  pure $
+    s
+      { mStatus = case mStatus s of
+          RUNNING -> PAUSE
+          PAUSE -> RUNNING
+          _other -> _other
+      }
