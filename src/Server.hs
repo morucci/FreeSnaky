@@ -13,6 +13,7 @@ module Server
     Direction (..),
     Item (..),
     World (..),
+    WStatus (PAUSE),
 
     -- * Facilities data types
     NetworkAddr (..),
@@ -87,6 +88,8 @@ data ProtoMessage
     Ping UTCTime
   | -- | Pong message
     Pong UTCTime
+  | -- | Pause game
+    Pause
   deriving (Show, Generic)
 
 instance Serialise ProtoMessage
@@ -200,9 +203,12 @@ application logger st pending = do
           resp <- getProtoMessage conn
           case resp of
             SnakeDirection dir -> do
-              setDirection appMem dir
-              logMsg logger $ "Got SnakeDirection from " <> client
+              status <- gameStatus appMem
+              when (status == RUNNING) $ do
+                setDirection appMem dir
+                logMsg logger $ "Got SnakeDirection from " <> client
             Ping date -> WS.sendBinaryData conn $ serialise $ Pong date
+            Pause -> setPause appMem
             Bye -> do
               logMsg logger $ "Got Bye message from " <> client
               removeClient client st
@@ -211,18 +217,26 @@ application logger st pending = do
           handleInputCommands appMem
         handleGameState :: AppMem -> IO ()
         handleGameState appMem = do
-          (world, status, speedFactor, score) <- runStep appMem
-          WS.sendBinaryData conn $ serialise $ Tick world
-          logMsg logger $ "Sending tick to client " <> client
-          when (status == GAMEOVER) $ do
-            addScore logger (leaderBoard st) client score
-            sendLeaderBoard conn
-            resetAppMem appMem
-          let minDelay = 200000
-              delay = max minDelay $ truncate $ initialTickDelay / speedFactor
-          logMsg logger $ from ("Waiting " <> show delay <> " for client " <> from client)
-          threadDelay delay
-          handleGameState appMem
+          status <- gameStatus appMem
+          case status of
+            RUNNING -> do
+              (world, newStatus, speedFactor, score) <- runStep appMem
+              WS.sendBinaryData conn $ serialise $ Tick world
+              logMsg logger $ "Sending tick to client " <> client
+              when (newStatus == GAMEOVER) $ do
+                addScore logger (leaderBoard st) client score
+                sendLeaderBoard conn
+                resetAppMem appMem
+              let minDelay = 200000
+                  delay = max minDelay $ truncate $ initialTickDelay / speedFactor
+              logMsg logger $ from ("Waiting " <> show delay <> " for client " <> from client)
+              threadDelay delay
+              handleGameState appMem
+            GAMEOVER -> pure ()
+            PAUSE -> do
+              WS.sendBinaryData conn $ serialise Pause
+              threadDelay 250000
+              handleGameState appMem
 
 -- Functions to start the server
 --------------------------------

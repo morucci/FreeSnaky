@@ -52,6 +52,7 @@ data ServerEvent
   = Tick S.World
   | LeaderBoard L.Board
   | ServerPing NominalDiffTime
+  | Pause
 
 data Name = MainView deriving (Eq, Ord, Show)
 
@@ -60,13 +61,14 @@ data SnakeAppState = SnakeAppState
   { appWState :: Maybe S.World,
     appLeaderBoard :: Maybe L.Board,
     appServerPing :: Maybe NominalDiffTime,
+    appPause :: Bool,
     _appConn :: WS.Connection
   }
 
 -- | Draw the UI according to the 'SnakeAppState'
 drawUI :: SnakeAppState -> [Widget Name]
-drawUI (SnakeAppState Nothing _ _ _) = [vBox [str "Waiting for server map"]]
-drawUI (SnakeAppState (Just S.World {..}) boardM serverPingM _) =
+drawUI (SnakeAppState Nothing _ _ _ _) = [vBox [str "Waiting for server map"]]
+drawUI (SnakeAppState (Just S.World {..}) boardM serverPingM pause _) =
   [ withBorderStyle BS.unicodeBold $
       B.borderWithLabel (str "FreeSnaky") gameView
   ]
@@ -75,7 +77,8 @@ drawUI (SnakeAppState (Just S.World {..}) boardM serverPingM _) =
     infoView =
       hBox $
         [str $ "Score: " <> show wScore, str " "]
-          <> maybe mempty (\v -> [str $ "Ping: " <> diffMs v]) serverPingM
+          <> maybe mempty (\v -> [str $ " Ping: " <> diffMs v]) serverPingM
+          <> if pause then [str " 'p' unpause"] else [str " 'p' pause"]
 
     gameView =
       hBox
@@ -107,18 +110,27 @@ drawUI (SnakeAppState (Just S.World {..}) boardM serverPingM _) =
 
 -- | Handle application events
 handleEvent :: SnakeAppState -> BrickEvent Name ServerEvent -> EventM Name (Next SnakeAppState)
-handleEvent s@(SnakeAppState _ _board _serverPing conn) event = case event of
+handleEvent s@(SnakeAppState _ _board _serverPing _pause conn) event = case event of
   VtyEvent (V.EvKey V.KEsc []) -> do
     liftIO . WS.sendClose conn $ serialise S.Bye
     void . liftIO $ S.getProtoMessage conn
     halt s
-  AppEvent (Tick newWorld) -> continue $ s {appWState = Just newWorld}
+  AppEvent (Tick newWorld) ->
+    continue $
+      s
+        { appWState = Just newWorld,
+          appPause = False
+        }
   AppEvent (LeaderBoard newLBoard) -> continue $ s {appLeaderBoard = Just newLBoard}
   AppEvent (ServerPing dt) -> continue $ s {appServerPing = Just dt}
+  AppEvent Pause -> continue $ s {appPause = True}
   VtyEvent (V.EvKey V.KRight []) -> handleDirEvent S.RIGHT
   VtyEvent (V.EvKey V.KLeft []) -> handleDirEvent S.LEFT
   VtyEvent (V.EvKey V.KUp []) -> handleDirEvent S.UP
   VtyEvent (V.EvKey V.KDown []) -> handleDirEvent S.DOWN
+  VtyEvent (V.EvKey (V.KChar 'p') []) -> do
+    liftIO $ WS.sendBinaryData conn $ serialise S.Pause
+    continue s
   _ -> continue s
   where
     handleDirEvent :: S.Direction -> EventM Name (Next SnakeAppState)
@@ -169,7 +181,7 @@ runClientApp clientId conn = do
   where
     runBrickApp :: BChan ServerEvent -> IO ()
     runBrickApp chan = do
-      let initialState = SnakeAppState Nothing Nothing Nothing conn
+      let initialState = SnakeAppState Nothing Nothing Nothing False conn
           buildVty = V.mkVty V.defaultConfig
       initialVty <- buildVty
       void $ customMain initialVty buildVty (Just chan) brickApp initialState
@@ -192,6 +204,9 @@ runClientApp clientId conn = do
         S.Pong sentDate -> do
           now <- getCurrentTime
           writeBChan chan . ServerPing $ diffUTCTime now sentDate
+          readServerMessages chan
+        S.Pause -> do
+          writeBChan chan Pause
           readServerMessages chan
         S.Bye -> putStrLn "Server closed connection"
         _ -> putStrLn "Unhandled server message"

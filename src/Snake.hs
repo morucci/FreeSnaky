@@ -20,6 +20,8 @@ module Snake
     resetAppMem,
     runStep,
     setDirection,
+    gameStatus,
+    setPause,
   )
 where
 
@@ -125,10 +127,12 @@ instance Serialise Direction
 
 -- | Game status
 data WStatus
-  = -- | A Game that is over
+  = -- | A game that is over
     GAMEOVER
   | -- | A game that is running
     RUNNING
+  | -- | A game on pause
+    PAUSE
   deriving (Show, Eq, Generic)
 
 instance Serialise WStatus
@@ -315,6 +319,10 @@ initAppMem = do
 resetAppMem :: AppMem -> IO ()
 resetAppMem (AppMem mem) = modifyMVar_ mem $ const mkMap
 
+-- | Read the game state
+gameStatus :: AppMem -> IO WStatus
+gameStatus (AppMem mem) = mStatus <$> readMVar mem
+
 -- | Perform a Game tick
 runStep :: AppMem -> IO (World, WStatus, Float, Int)
 runStep (AppMem mem) = modifyMVar mem doM
@@ -367,3 +375,17 @@ setDirection (AppMem mem) dir = modifyMVar_ mem doM
               { mSnake = setSnakeDirection dir $ mSnake s,
                 mDirSet = True
               }
+
+-- | Set/Unset pause status
+setPause :: AppMem -> IO ()
+setPause (AppMem mem) = modifyMVar_ mem doM
+  where
+    doM :: WState -> IO WState
+    doM s =
+      pure $
+        s
+          { mStatus = case mStatus s of
+              RUNNING -> PAUSE
+              PAUSE -> RUNNING
+              _other -> _other
+          }
