@@ -22,7 +22,7 @@ import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (withAsync)
 import Control.Monad (void)
 import Control.Monad.IO.Class (liftIO)
-import Data.List (sort)
+import Data.List (intercalate, sort)
 import qualified Data.Text as T
 import Data.Time (NominalDiffTime, diffUTCTime, getCurrentTime)
 import qualified Graphics.Vty as V
@@ -52,6 +52,7 @@ data ServerEvent
   = Tick S.World
   | LeaderBoard L.Board
   | ServerPing NominalDiffTime
+  | QuitGame
   | Pause
 
 data Name = MainView deriving (Eq, Ord, Show)
@@ -67,36 +68,46 @@ data SnakeAppState = SnakeAppState
 
 -- | Draw the UI according to the 'SnakeAppState'
 drawUI :: SnakeAppState -> [Widget Name]
-drawUI (SnakeAppState Nothing _ _ _ _) = [vBox [str "Waiting for server map"]]
-drawUI (SnakeAppState (Just S.World {..}) boardM serverPingM pause _) =
+drawUI (SnakeAppState worldM boardM serverPingM pause _) =
   [ withBorderStyle BS.unicodeBold $
-      B.borderWithLabel (str "FreeSnaky") gameView
+      B.borderWithLabel (str "FreeSnaky") mainWidget
   ]
   where
-    diffMs v = printf "%.5s ms" (show v)
-    infoView =
-      hBox $
-        [str $ "Score: " <> show wScore, str " "]
-          <> maybe mempty (\v -> [str $ " Ping: " <> diffMs v]) serverPingM
-          <> if pause then [str " 'p' unpause"] else [str " 'p' pause"]
-
-    gameView =
+    mainWidget =
       hBox
-        [ vBox [infoView, snakeWorldWidget],
+        [ hLimit 50 $ padRight Max $ vBox [infoWidget, snakeWorldWidget],
           vBox [str " "],
-          vBox [str "Leader board", leaderBoard]
+          hLimit 25 $ padRight Max $ vBox [str "Leader board", leaderBoardWidget]
         ]
-    snakeWorldWidget = vBox rows
-    rows = [hBox $ cellsInRow r | r <- [0 .. wHeight - 1]]
-    cellsInRow y = [drawCoord (x, y) | x <- [0 .. wWidth - 1]]
-    drawCoord (x, y) = case wFlattenedMap !! x !! y of
-      S.SB -> withAttr snakeAttr $ str "o"
-      S.BL -> withAttr blockAttr $ str " "
-      S.Void -> str " "
-      S.FD -> withAttr foodAttr $ str "*"
-      S.EFD -> withAttr snakeAttr $ str "O"
-      S.COLLISION -> withAttr collisionAttr $ str "x"
-    leaderBoard = case boardM of
+    infoWidget = hBox $ intercalate [str ""] [scoreWidget, pingWidget, pauseWidget]
+      where
+        pingWidget = maybe mempty (\v -> [str $ "Ping: " <> printf "%.5s ms" (show v)]) serverPingM
+        scoreWidget = maybe mempty (\w -> [str $ "Score: " <> show (S.wScore w), str " "]) worldM
+        pauseWidget = case worldM of
+          Just _ -> if pause then [str " 'p' unpause"] else [str " 'p' pause"]
+          Nothing -> mempty
+    snakeWorldWidget = case worldM of
+      Nothing ->
+        vBox
+          [ str " ",
+            str "Welcome in FreeSnaky world !",
+            str " ",
+            str "Press 's' to start the game",
+            str "Press 'q' to quit a running game",
+            str "Press 'Esc' to quit FreeSnaky"
+          ]
+      (Just (S.World {..})) -> vBox rows
+        where
+          rows = [hBox $ cellsInRow r | r <- [0 .. wHeight - 1]]
+          cellsInRow y = [drawCoord (x, y) | x <- [0 .. wWidth - 1]]
+          drawCoord (x, y) = case wFlattenedMap !! x !! y of
+            S.SB -> withAttr snakeAttr $ str "o"
+            S.BL -> withAttr blockAttr $ str " "
+            S.Void -> str " "
+            S.FD -> withAttr foodAttr $ str "*"
+            S.EFD -> withAttr snakeAttr $ str "O"
+            S.COLLISION -> withAttr collisionAttr $ str "x"
+    leaderBoardWidget = case boardM of
       Just (Board board) -> vBox $ map mkEntry (take 25 $ sort board)
       _ -> str ""
       where
@@ -124,12 +135,24 @@ handleEvent s@(SnakeAppState _ _board _serverPing _pause conn) event = case even
   AppEvent (LeaderBoard newLBoard) -> continue $ s {appLeaderBoard = Just newLBoard}
   AppEvent (ServerPing dt) -> continue $ s {appServerPing = Just dt}
   AppEvent Pause -> continue $ s {appPause = True}
+  AppEvent QuitGame ->
+    continue $
+      s
+        { appWState = Nothing,
+          appPause = False
+        }
   VtyEvent (V.EvKey V.KRight []) -> handleDirEvent S.RIGHT
   VtyEvent (V.EvKey V.KLeft []) -> handleDirEvent S.LEFT
   VtyEvent (V.EvKey V.KUp []) -> handleDirEvent S.UP
   VtyEvent (V.EvKey V.KDown []) -> handleDirEvent S.DOWN
   VtyEvent (V.EvKey (V.KChar 'p') []) -> do
     liftIO $ WS.sendBinaryData conn $ serialise S.Pause
+    continue s
+  VtyEvent (V.EvKey (V.KChar 's') []) -> do
+    liftIO $ WS.sendBinaryData conn $ serialise S.NewGame
+    continue s
+  VtyEvent (V.EvKey (V.KChar 'q') []) -> do
+    liftIO $ WS.sendBinaryData conn $ serialise S.EndGame
     continue s
   _ -> continue s
   where
@@ -207,6 +230,9 @@ runClientApp clientId conn = do
           readServerMessages chan
         S.Pause -> do
           writeBChan chan Pause
+          readServerMessages chan
+        S.EndGame -> do
+          writeBChan chan QuitGame
           readServerMessages chan
         S.Bye -> putStrLn "Server closed connection"
         _ -> putStrLn "Unhandled server message"

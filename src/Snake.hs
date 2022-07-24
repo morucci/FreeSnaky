@@ -22,6 +22,7 @@ module Snake
     setDirection,
     gameStatus,
     setPause,
+    setRunning,
   )
 where
 
@@ -133,6 +134,8 @@ data WStatus
     RUNNING
   | -- | A game on pause
     PAUSE
+  | -- | A game ready to start
+    NEWGAME
   deriving (Show, Eq, Generic)
 
 instance Serialise WStatus
@@ -286,7 +289,7 @@ mkMap = do
       mHeight = height
       mBlocks = mkBounds
       mFood = food
-      mStatus = RUNNING
+      mStatus = NEWGAME
       mSpeedFactor = 1.0
       mScore = 0
       mGenFood = True
@@ -363,7 +366,7 @@ runStep (AppMem mem) = modifyMVar mem doM
 
 -- | Set Snake direction
 setDirection :: AppMem -> Direction -> IO ()
-setDirection (AppMem mem) dir = modifyMVar_ mem $ \s -> do
+setDirection (AppMem mem) dir = modifyMVar_ mem $ \s ->
   pure $
     if mDirSet s
       then s
@@ -375,7 +378,7 @@ setDirection (AppMem mem) dir = modifyMVar_ mem $ \s -> do
 
 -- | Set/Unset pause status
 setPause :: AppMem -> IO ()
-setPause (AppMem mem) = modifyMVar_ mem $ \s -> do
+setPause (AppMem mem) = modifyMVar_ mem $ \s ->
   pure $
     s
       { mStatus = case mStatus s of
@@ -383,3 +386,8 @@ setPause (AppMem mem) = modifyMVar_ mem $ \s -> do
           PAUSE -> RUNNING
           _other -> _other
       }
+
+-- | Set running status
+setRunning :: AppMem -> IO ()
+setRunning (AppMem mem) = modifyMVar_ mem $ \s ->
+  pure $ s {mStatus = RUNNING}

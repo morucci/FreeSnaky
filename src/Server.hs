@@ -90,6 +90,10 @@ data ProtoMessage
     Pong UTCTime
   | -- | Pause game
     Pause
+  | -- | Start a new game
+    NewGame
+  | -- | Stop a game
+    EndGame
   deriving (Show, Generic)
 
 instance Serialise ProtoMessage
@@ -165,7 +169,7 @@ application logger st pending = do
   WS.withPingThread conn 30 (pure ()) $ do
     msg <- getProtoMessage conn
     case msg of
-      Hello ident -> handleClient ident conn
+      Hello ident -> handleWelcomeClient ident conn
       _ -> logMsg logger "Protocol violation. Expected Hello."
   where
     sendLeaderBoard :: WS.Connection -> IO ()
@@ -173,8 +177,8 @@ application logger st pending = do
       board <- readLeaderBoard $ leaderBoard st
       WS.sendBinaryData conn $ serialise $ LeaderBoard board
 
-    handleClient :: ClientID -> WS.Connection -> IO ()
-    handleClient client conn = do
+    handleWelcomeClient :: ClientID -> WS.Connection -> IO ()
+    handleWelcomeClient client conn = do
       logMsg logger ("Incoming client: " <> client)
       cExists <- clientExists client st
       if cExists
@@ -186,10 +190,10 @@ application logger st pending = do
           WS.sendBinaryData conn $ serialise $ Hello client
           addClient client st
           sendLeaderBoard conn
-          handleGame client conn
+          handleClient client conn
 
-    handleGame :: ClientID -> WS.Connection -> IO ()
-    handleGame client conn = do
+    handleClient :: ClientID -> WS.Connection -> IO ()
+    handleClient client conn = do
       wStateM <- initAppMem
       -- TODO: add cleanup function for when server stop
       -- a sendClose is sent to all clients
@@ -202,11 +206,13 @@ application logger st pending = do
         handleInputCommands appMem = do
           resp <- getProtoMessage conn
           case resp of
+            NewGame -> setRunning appMem
+            EndGame -> do
+              resetAppMem appMem
+              WS.sendBinaryData conn $ serialise EndGame
             SnakeDirection dir -> do
               status <- gameStatus appMem
-              when (status == RUNNING) $ do
-                setDirection appMem dir
-                logMsg logger $ "Got SnakeDirection from " <> client
+              when (status == RUNNING) $ setDirection appMem dir
             Ping date -> WS.sendBinaryData conn $ serialise $ Pong date
             Pause -> setPause appMem
             Bye -> do
@@ -222,20 +228,24 @@ application logger st pending = do
             RUNNING -> do
               (world, newStatus, speedFactor, score) <- runStep appMem
               WS.sendBinaryData conn $ serialise $ Tick world
-              logMsg logger $ "Sending tick to client " <> client
               when (newStatus == GAMEOVER) $ do
                 addScore logger (leaderBoard st) client score
-                sendLeaderBoard conn
-                resetAppMem appMem
+                handleGameState appMem
               let minDelay = 200000
                   delay = max minDelay $ truncate $ initialTickDelay / speedFactor
-              logMsg logger $ from ("Waiting " <> show delay <> " for client " <> from client)
               threadDelay delay
               handleGameState appMem
-            GAMEOVER -> pure ()
             PAUSE -> do
               WS.sendBinaryData conn $ serialise Pause
               threadDelay 250000
+              handleGameState appMem
+            NEWGAME -> do
+              threadDelay 250000
+              handleGameState appMem
+            GAMEOVER -> do
+              sendLeaderBoard conn
+              resetAppMem appMem
+              WS.sendBinaryData conn $ serialise EndGame
               handleGameState appMem
 
 -- Functions to start the server
