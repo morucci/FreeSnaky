@@ -3,19 +3,16 @@
   nixConfig.bash-prompt = "[nix(FreeSnaky)] ";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs";
+    hspkgs.url = "github:podenv/hspkgs/24d2028871584f71313ac06e23ef143db61aea34";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
+  outputs = { self, hspkgs, flake-utils }:
     flake-utils.lib.eachSystem [ "x86_64-linux" ] (system:
       let
-        pkgs = import nixpkgs {
-          inherit system;
-          # config.allowBroken = true;
-        };
         packageName = "FreeSnaky";
-        haskellPackages = pkgs.haskellPackages;
+        pkgs = hspkgs.pkgs;
+        haskellPackages = pkgs.hspkgs;
         myPackage = haskellPackages.callCabal2nix packageName self { };
 
       in {
@@ -25,11 +22,11 @@
         devShell = haskellPackages.shellFor {
           packages = p: [ myPackage ];
 
-          buildInputs = with haskellPackages; [
-            ghcid
-            ormolu
-            cabal-install
-            hlint
+          buildInputs = [
+            pkgs.ghcid
+            pkgs.ormolu
+            pkgs.cabal-install
+            pkgs.hlint
             pkgs.haskell-language-server
           ];
         };
