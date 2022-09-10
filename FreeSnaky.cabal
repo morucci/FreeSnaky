@@ -43,11 +43,17 @@ library
                     , random
                     , network
                     , serialise
+                    , servant
+                    , servant-server
+                    , servant-websockets
+                    , streaming-commons
                     , text
                     , time
                     , websockets
                     , witch
                     , optparse-generic
+                    , wai
+                    , warp
     hs-source-dirs:   src
 
 executable FreeSnaky

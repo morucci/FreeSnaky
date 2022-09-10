@@ -244,7 +244,8 @@ runClientApp clientId conn = do
 runClient :: S.NetworkAddr -> T.Text -> IO ()
 runClient S.NetworkAddr {..} ident =
   withSocketsDo $
-    WS.runClient nAddr nPort "/" $ runClientApp ident
+    WS.runClient nAddr nPort "/ws/snaky/cbor" $
+      runClientApp ident
 
 -- | Run a TUI Client by connection on the local server
 runClientLocal :: T.Text -> IO ()

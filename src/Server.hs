@@ -1,3 +1,6 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeOperators #-}
+
 -- |
 -- Module      : Server
 -- Description : WebSocket interface to the Snake game
@@ -41,7 +44,10 @@ import Control.Concurrent
   )
 import Control.Concurrent.Async (concurrently_)
 import Control.Exception (throwIO, try)
-import Control.Monad (when)
+import Control.Monad (forM_, when)
+import Control.Monad.IO.Class (MonadIO (liftIO))
+import Data.Streaming.Network.Internal (HostPreference (Host))
+import Data.Text (pack)
 import qualified Data.Text as T
 import Data.Time (UTCTime)
 import GHC.Generics (Generic)
@@ -52,8 +58,13 @@ import LeaderBoard
     readLeaderBoard,
     writeLeaderBoard,
   )
+import Network.Wai as Wai
+import Network.Wai.Handler.Warp as Warp
 import qualified Network.WebSockets as WS
+import Servant
+import Servant.API.WebSocket
 import Snake
+import System.IO
 import System.Log.FastLogger
   ( LogStr,
     LogType' (LogNone),
@@ -162,8 +173,8 @@ addScore logger board ident score = do
     Left err -> logMsg logger $ from ("Unable to save score: " <> show err)
 
 -- | The connection handler
-application :: TimedFastLogger -> ServerState -> WS.ServerApp
-application logger st pending = do
+snakeWSApp :: TimedFastLogger -> ServerState -> WS.PendingConnection -> IO ()
+snakeWSApp logger st pending = do
   conn <- WS.acceptRequest pending
   logMsg logger "Received incoming connection"
   WS.withPingThread conn 30 (pure ()) $ do
@@ -257,11 +268,39 @@ data NetworkAddr = NetworkAddr
   }
   deriving (Show)
 
+type FreeSnakyWebAPIv1 =
+  "ws" :> "counter" :> WebSocket
+    :<|> "ws" :> "snaky" :> "cbor" :> WebSocketPending
+
+freeSnakyWebAPIv1 :: Proxy FreeSnakyWebAPIv1
+freeSnakyWebAPIv1 = Proxy
+
+-- dummy endpoint to be converted to an HTMX WS endpoint
+counterServer :: Server WebSocket
+counterServer = streamData
+  where
+    streamData :: MonadIO m => WS.Connection -> m ()
+    streamData c = do
+      liftIO $ WS.withPingThread c 10 (pure ()) $ do
+        liftIO . forM_ [1 ..] $ \i -> do
+          WS.sendTextData c (pack $ show (i :: Int)) >> threadDelay 1000000
+
+snakyCborServer :: TimedFastLogger -> ServerState -> Server WebSocketPending
+snakyCborServer logger state = streamData
+  where
+    streamData :: MonadIO m => WS.PendingConnection -> m ()
+    streamData pending = liftIO $ snakeWSApp logger state pending
+
+freeSnakyServer :: TimedFastLogger -> ServerState -> Server FreeSnakyWebAPIv1
+freeSnakyServer logger state = counterServer :<|> snakyCborServer logger state
+
+freeSnakyApp :: TimedFastLogger -> ServerState -> Wai.Application
+freeSnakyApp logger state = serve freeSnakyWebAPIv1 $ freeSnakyServer logger state
+
 -- | Run a local server on port 9160
 runServerLocal :: IO ()
 runServerLocal = runServer (NetworkAddr "127.0.0.1" 9160) LogNone
 
--- | Run a server
 runServer :: NetworkAddr -> LogType' LogStr -> IO ()
 runServer NetworkAddr {..} logType = do
   serverState <- newServerState
@@ -270,4 +309,5 @@ runServer NetworkAddr {..} logType = do
     Right st -> do
       timeCache <- newTimeCache simpleTimeFormat
       (logger, _) <- newTimedFastLogger timeCache logType
-      WS.runServer nAddr nPort $ application logger st
+      let warpS = Warp.setPort nPort $ Warp.setHost (Host nAddr) $ Warp.defaultSettings
+      Warp.runSettings warpS $ freeSnakyApp logger st
