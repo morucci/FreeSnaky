@@ -51,13 +51,15 @@ import qualified Data.Text as T
 import Data.Time (UTCTime)
 import GHC.Generics (Generic)
 import LeaderBoard
-  ( Board,
+  ( Board (Board),
+    BoardEntry (BoardEntry),
     LeaderBoard,
     loadLeaderBoard,
     readLeaderBoard,
     writeLeaderBoard,
   )
 import Lucid
+import Lucid.Base (commuteHtmlT)
 import Network.Wai as Wai
 import Network.Wai.Handler.Warp as Warp
 import qualified Network.WebSockets as WS
@@ -285,7 +287,7 @@ snakyCborServer logger state = streamData
 freeSnakyServer :: TimedFastLogger -> ServerState -> Server FreeSnakyWebAPIv1
 freeSnakyServer logger state =
   snakyCborServer logger state
-    :<|> pure statusHtml
+    :<|> commuteHtmlT (statusHtml state)
 
 freeSnakyApp :: TimedFastLogger -> ServerState -> Wai.Application
 freeSnakyApp logger state = serve freeSnakyWebAPIv1 $ freeSnakyServer logger state
@@ -305,10 +307,26 @@ runServer NetworkAddr {..} logType = do
       let warpS = Warp.setPort nPort $ Warp.setHost (Host nAddr) $ Warp.defaultSettings
       Warp.runSettings warpS $ freeSnakyApp logger st
 
-statusHtml :: Html ()
-statusHtml = do
+statusHtml :: MonadIO m => ServerState -> HtmlT m ()
+statusHtml ServerState {leaderBoard} = do
+  board <- liftIO $ readLeaderBoard leaderBoard
+  let Board entries = board
   doctypehtml_ $ do
     head_ $ do
-      title_ "Status page."
+      title_ "Status page"
     body_ $ do
-      p_ "Here is the FreeSnaky status page."
+      h1_ "Here is the FreeSnaky status page."
+      div_ $ do
+        h2_ "LeaderBoard"
+        table_ $ do
+          tr_ $ do
+            th_ "Date"
+            th_ "Name"
+            th_ "Score"
+          mapM_ tes entries
+  where
+    tes :: Monad m => BoardEntry -> HtmlT m ()
+    tes (BoardEntry ident score date) = tr_ $ do
+      td_ $ toHtml $ show date
+      td_ $ toHtml ident
+      td_ $ toHtml $ show score
