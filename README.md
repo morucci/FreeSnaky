@@ -46,3 +46,8 @@ To get a shell to develop on FreeSnaky (with ghc, cabal, hls, ghcid) run:
 ```
 nix develop
 ```
+
+To hack on the Web UI run this command to get the server restarted each time when the code change.
+```
+ghcid -c 'cabal repl' -r="Server.runServerLocal"
+```

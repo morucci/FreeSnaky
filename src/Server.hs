@@ -311,4 +311,4 @@ statusHtml = do
     head_ $ do
       title_ "Status page."
     body_ $ do
-      p_ "Here is the FreeSnaky status page"
+      p_ "Here is the FreeSnaky status page."
