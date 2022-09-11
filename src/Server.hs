@@ -44,10 +44,9 @@ import Control.Concurrent
   )
 import Control.Concurrent.Async (concurrently_)
 import Control.Exception (throwIO, try)
-import Control.Monad (forM_, when)
+import Control.Monad (when)
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Data.Streaming.Network.Internal (HostPreference (Host))
-import Data.Text (pack)
 import qualified Data.Text as T
 import Data.Time (UTCTime)
 import GHC.Generics (Generic)
@@ -58,11 +57,13 @@ import LeaderBoard
     readLeaderBoard,
     writeLeaderBoard,
   )
+import Lucid
 import Network.Wai as Wai
 import Network.Wai.Handler.Warp as Warp
 import qualified Network.WebSockets as WS
 import Servant
 import Servant.API.WebSocket
+import Servant.HTML.Lucid
 import Snake
 import System.IO
 import System.Log.FastLogger
@@ -269,21 +270,11 @@ data NetworkAddr = NetworkAddr
   deriving (Show)
 
 type FreeSnakyWebAPIv1 =
-  "ws" :> "counter" :> WebSocket
-    :<|> "ws" :> "snaky" :> "cbor" :> WebSocketPending
+  "ws" :> "snaky" :> "cbor" :> WebSocketPending
+    :<|> "status" :> Get '[HTML] (Html ())
 
 freeSnakyWebAPIv1 :: Proxy FreeSnakyWebAPIv1
 freeSnakyWebAPIv1 = Proxy
-
--- dummy endpoint to be converted to an HTMX WS endpoint
-counterServer :: Server WebSocket
-counterServer = streamData
-  where
-    streamData :: MonadIO m => WS.Connection -> m ()
-    streamData c = do
-      liftIO $ WS.withPingThread c 10 (pure ()) $ do
-        liftIO . forM_ [1 ..] $ \i -> do
-          WS.sendTextData c (pack $ show (i :: Int)) >> threadDelay 1000000
 
 snakyCborServer :: TimedFastLogger -> ServerState -> Server WebSocketPending
 snakyCborServer logger state = streamData
@@ -292,7 +283,9 @@ snakyCborServer logger state = streamData
     streamData pending = liftIO $ snakeWSApp logger state pending
 
 freeSnakyServer :: TimedFastLogger -> ServerState -> Server FreeSnakyWebAPIv1
-freeSnakyServer logger state = counterServer :<|> snakyCborServer logger state
+freeSnakyServer logger state =
+  snakyCborServer logger state
+    :<|> pure statusHtml
 
 freeSnakyApp :: TimedFastLogger -> ServerState -> Wai.Application
 freeSnakyApp logger state = serve freeSnakyWebAPIv1 $ freeSnakyServer logger state
@@ -311,3 +304,11 @@ runServer NetworkAddr {..} logType = do
       (logger, _) <- newTimedFastLogger timeCache logType
       let warpS = Warp.setPort nPort $ Warp.setHost (Host nAddr) $ Warp.defaultSettings
       Warp.runSettings warpS $ freeSnakyApp logger st
+
+statusHtml :: Html ()
+statusHtml = do
+  doctypehtml_ $ do
+    head_ $ do
+      title_ "Status page."
+    body_ $ do
+      p_ "Here is the FreeSnaky status page"

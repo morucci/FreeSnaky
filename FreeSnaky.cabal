@@ -44,9 +44,11 @@ library
                     , network
                     , serialise
                     , servant
+                    , servant-lucid
                     , servant-server
                     , servant-websockets
                     , streaming-commons
+                    , lucid
                     , text
                     , time
                     , websockets
