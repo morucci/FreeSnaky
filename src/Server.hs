@@ -46,9 +46,12 @@ import Control.Concurrent.Async (concurrently_)
 import Control.Exception (throwIO, try)
 import Control.Monad (when)
 import Control.Monad.IO.Class (MonadIO (liftIO))
+import Control.Monad.Morph (hoist)
+import Data.Functor.Identity (Identity (runIdentity))
 import Data.Streaming.Network.Internal (HostPreference (Host))
 import qualified Data.Text as T
-import Data.Time (UTCTime)
+import Data.Time (UTCTime, formatTime)
+import Data.Time.Format (defaultTimeLocale)
 import GHC.Generics (Generic)
 import LeaderBoard
   ( Board (Board),
@@ -60,6 +63,7 @@ import LeaderBoard
   )
 import Lucid
 import Lucid.Base (commuteHtmlT)
+import Lucid.XStatic (xstaticScripts)
 import Network.Wai as Wai
 import Network.Wai.Handler.Warp as Warp
 import qualified Network.WebSockets as WS
@@ -79,6 +83,7 @@ import System.Log.FastLogger
     simpleTimeFormat,
   )
 import Witch
+import qualified XStatic as XStatic
 import qualified XStatic.Tailwind as XStatic
 import Prelude
 
@@ -311,26 +316,43 @@ runServer NetworkAddr {..} logType = do
       let warpS = Warp.setPort nPort $ Warp.setHost (Host nAddr) $ Warp.defaultSettings
       Warp.runSettings warpS $ freeSnakyApp logger st
 
-statusHtml :: MonadIO m => ServerState -> HtmlT m ()
-statusHtml ServerState {leaderBoard} = do
-  board <- liftIO $ readLeaderBoard leaderBoard
+-- To be used by hoist to generalize the inner Mondad
+generalize :: (Monad m) => Identity a -> m a
+generalize m = return (runIdentity m)
+
+gXstaticScripts :: MonadIO m => [XStatic.XStaticFile] -> HtmlT m ()
+gXstaticScripts xsf = hoist generalize $ xstaticScripts xsf
+
+leaderBoardHtml :: MonadIO m => LeaderBoard -> HtmlT m ()
+leaderBoardHtml lb = do
+  board <- liftIO $ readLeaderBoard lb
   let Board entries = board
-  doctypehtml_ $ do
-    head_ $ do
-      title_ "Status page"
-    body_ $ do
-      h1_ "Here is the FreeSnaky status page."
-      div_ $ do
-        h2_ "LeaderBoard"
-        table_ $ do
-          tr_ $ do
+  div_ [class_ "container mx-auto px-10"] $ do
+    div_ [class_ "border-4 border-green-400 rounded font-mono"] $ do
+      div_ [class_ "flex justify-center bg-green-400"] $ do
+        h2_ [class_ "font-semibold text-xl"] "LeaderBoard"
+      table_ [class_ "border-separate border-spacing-1 bg-green-100 w-full"] $ do
+        thead_ $ do
+          tr_ [class_ "text-left"] $ do
             th_ "Date"
             th_ "Name"
             th_ "Score"
-          mapM_ tes entries
+        tbody_ $ do
+          mapM_ renderRow entries
   where
-    tes :: Monad m => BoardEntry -> HtmlT m ()
-    tes (BoardEntry ident score date) = tr_ $ do
-      td_ $ toHtml $ show date
+    renderRow :: Monad m => BoardEntry -> HtmlT m ()
+    renderRow (BoardEntry ident score date) = tr_ $ do
+      td_ $ toHtml $ formatD date
       td_ $ toHtml ident
       td_ $ toHtml $ show score
+    formatD :: UTCTime -> String
+    formatD d = formatTime defaultTimeLocale "%F %T" d
+
+statusHtml :: MonadIO m => ServerState -> HtmlT m ()
+statusHtml ServerState {leaderBoard} = do
+  doctypehtml_ $ do
+    head_ $ do
+      title_ "Status page"
+      gXstaticScripts [XStatic.tailwind]
+    body_ $ do
+      leaderBoardHtml leaderBoard

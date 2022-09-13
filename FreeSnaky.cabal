@@ -41,6 +41,7 @@ library
                     , brick
                     , vty
                     , random
+                    , mmorph
                     , network
                     , serialise
                     , servant
@@ -50,6 +51,7 @@ library
                     , servant-xstatic
                     , streaming-commons
                     , lucid
+                    , lucid-xstatic
                     , text
                     , time
                     , websockets
@@ -57,6 +59,7 @@ library
                     , optparse-generic
                     , wai
                     , warp
+                    , xstatic
                     , xstatic-tailwind
     hs-source-dirs:   src
 
