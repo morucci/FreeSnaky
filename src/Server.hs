@@ -66,6 +66,7 @@ import qualified Network.WebSockets as WS
 import Servant
 import Servant.API.WebSocket
 import Servant.HTML.Lucid
+import Servant.XStatic (xstaticServant)
 import Snake
 import System.IO
 import System.Log.FastLogger
@@ -78,6 +79,7 @@ import System.Log.FastLogger
     simpleTimeFormat,
   )
 import Witch
+import qualified XStatic.Tailwind as XStatic
 import Prelude
 
 logMsg :: TimedFastLogger -> T.Text -> IO ()
@@ -272,7 +274,8 @@ data NetworkAddr = NetworkAddr
   deriving (Show)
 
 type FreeSnakyWebAPIv1 =
-  "ws" :> "snaky" :> "cbor" :> WebSocketPending
+  "xstatic" :> Raw
+    :<|> "ws" :> "snaky" :> "cbor" :> WebSocketPending
     :<|> "status" :> Get '[HTML] (Html ())
 
 freeSnakyWebAPIv1 :: Proxy FreeSnakyWebAPIv1
@@ -286,7 +289,8 @@ snakyCborServer logger state = streamData
 
 freeSnakyServer :: TimedFastLogger -> ServerState -> Server FreeSnakyWebAPIv1
 freeSnakyServer logger state =
-  snakyCborServer logger state
+  xstaticServant [XStatic.tailwind]
+    :<|> snakyCborServer logger state
     :<|> commuteHtmlT (statusHtml state)
 
 freeSnakyApp :: TimedFastLogger -> ServerState -> Wai.Application

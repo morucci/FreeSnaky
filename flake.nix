@@ -3,7 +3,8 @@
   nixConfig.bash-prompt = "[nix(FreeSnaky)] ";
 
   inputs = {
-    hspkgs.url = "github:podenv/hspkgs/24d2028871584f71313ac06e23ef143db61aea34";
+    hspkgs.url =
+      "github:podenv/hspkgs/70ebfaa3e643ce20fe8ff97c17693ceb4bfaa30d";
     flake-utils.url = "github:numtide/flake-utils";
   };
 

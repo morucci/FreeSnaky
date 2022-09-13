@@ -47,6 +47,7 @@ library
                     , servant-lucid
                     , servant-server
                     , servant-websockets
+                    , servant-xstatic
                     , streaming-commons
                     , lucid
                     , text
@@ -56,6 +57,7 @@ library
                     , optparse-generic
                     , wai
                     , warp
+                    , xstatic-tailwind
     hs-source-dirs:   src
 
 executable FreeSnaky
